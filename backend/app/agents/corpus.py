@@ -33,13 +33,16 @@ SYSTEM_PROMPT = """\
   "facts": [
     {
       "statement": "Конкретное утверждение из документа",
-      "source_id": "chunk_document_id из контекста"
+      "source_id": 1
     }
   ],
   "hypotheses": ["Предположение которого нет в документах явно"],
   "warnings": ["⚠️ Если использованы archived/draft данные или есть конфликт"],
   "requires_verification": ["Вопрос если данных недостаточно"]
 }
+
+source_id — это НОМЕР источника (1, 2, 3...) из заголовка [Источник N] в контексте выше.\
+
 
 Если в предоставленных фрагментах встречаются разные значения одной метрики — \
 обязательно отметь обе цифры в warnings с указанием источника каждой.
@@ -91,9 +94,10 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
     for i, c in enumerate(chunks):
         status_label = c.status.upper()
         level_label = f"L{c.hierarchy_level}"
+        title = c.title or c.document_id[:8]
         section = f" / {c.section}" if c.section else ""
         parts.append(
-            f"[Источник {i+1} | doc_id={c.document_id} | {status_label} | {level_label}{section}]\n"
+            f"[Источник {i+1} | {title}{section} | {status_label} | {level_label}]\n"
             f"{c.content}"
         )
     return "\n\n---\n\n".join(parts)
@@ -144,30 +148,37 @@ async def _parse_llm_response(
     warnings = data.get("warnings", [])
     requires = data.get("requires_verification", [])
 
-    # Строим map: document_id → chunk для обогащения ссылок
-    doc_map: dict[str, RetrievedChunk] = {c.document_id: c for c in chunks}
+    # Индексный map: номер источника (1-based) → chunk
+    index_map: dict[int, RetrievedChunk] = {i + 1: c for i, c in enumerate(chunks)}
 
     facts: list[FactItem] = []
     for f in data.get("facts", []):
         if not isinstance(f, dict) or not f.get("statement"):
             continue
-        source_id = f.get("source_id", "")
-        chunk = doc_map.get(source_id)
+
+        # source_id теперь целое число — номер источника
+        try:
+            source_num = int(f.get("source_id", 0))
+        except (TypeError, ValueError):
+            source_num = 0
+        chunk = index_map.get(source_num)
 
         if chunk:
-            doc_row = await get_document(db, source_id)
+            doc_row = await get_document(db, chunk.document_id)
             source = SourceRef(
-                document_id=source_id,  # type: ignore[arg-type]
-                title=doc_row.title if doc_row else source_id,
+                document_id=chunk.document_id,  # type: ignore[arg-type]
+                title=doc_row.title if doc_row else (chunk.title or chunk.document_id),
                 status=chunk.status,  # type: ignore[arg-type]
                 hierarchy_level=chunk.hierarchy_level,
                 section=chunk.section or None,
                 confluence_url=doc_row.confluence_url if doc_row else None,
             )
         else:
+            # Если LLM не дал валидный номер — ставим заглушку, не теряем факт
+            from uuid import UUID as _UUID
             source = SourceRef(
-                document_id=source_id,  # type: ignore[arg-type]
-                title=source_id or "Неизвестный источник",
+                document_id=_UUID("00000000-0000-0000-0000-000000000000"),
+                title="Источник не определён",
                 status="unknown",  # type: ignore[arg-type]
                 hierarchy_level=5,
             )
@@ -231,9 +242,10 @@ async def run(
         warnings.append("⚠️ В корпусе не найдено релевантных документов по данному запросу")
 
     # Предупреждение об archived чанках
-    archive_docs = {c.document_id for c in chunks if c.status == "archived"}
-    for doc_id in archive_docs:
-        warnings.append(f"⚠️ Использованы данные из архивного документа {doc_id}")
+    archive_chunks = {c.document_id: c for c in chunks if c.status == "archived"}
+    for doc_id, c in archive_chunks.items():
+        label = c.title or doc_id[:8]
+        warnings.append(f"⚠️ Использованы данные из архивного документа «{label}»")
 
     return {
         "answer": answer,

@@ -32,6 +32,10 @@ class RetrievedChunk:
     def section(self) -> str:
         return self.metadata.get("section", "")
 
+    @property
+    def title(self) -> str:
+        return self.metadata.get("title", "")
+
 
 def _reciprocal_rank_fusion(
     *ranked_lists: list[RetrievedChunk], k: int = 60

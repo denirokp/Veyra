@@ -88,6 +88,7 @@ async def index_document(
                     "metadata": {
                         **c.metadata,
                         "document_id": document_id,
+                        "title": document_metadata.get("title", ""),
                         "chunk_index": c.chunk_index,
                         "hierarchy_level": document_metadata.get("hierarchy_level", 5),
                         "status": document_metadata.get("status", "unknown"),
