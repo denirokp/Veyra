@@ -41,6 +41,9 @@ SYSTEM_PROMPT = """\
   "requires_verification": ["Вопрос если данных недостаточно"]
 }
 
+Если в предоставленных фрагментах встречаются разные значения одной метрики — \
+обязательно отметь обе цифры в warnings с указанием источника каждой.
+
 Отвечай ТОЛЬКО валидным JSON. Без markdown-обёртки.\
 """
 
@@ -182,7 +185,7 @@ async def run(
 ) -> dict:
     # Поиск релевантных чанков
     include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
-    chunks = await retrieve(message, top_k=10, include_archive=include_archive)
+    chunks = await retrieve(message, top_k=15, include_archive=include_archive)
 
     # Entity memory — обогащаем контекст релевантными сущностями
     entity_block = ""

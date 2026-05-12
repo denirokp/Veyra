@@ -7,26 +7,45 @@ import time
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents import corpus as corpus_agent
+from app.clients import get_llm
+from app.settings import settings
 from uuid import UUID
 
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
 
-TRIGGER_WORDS: dict[ChatMode, list[str]] = {
-    ChatMode.contradictions: ["расхождения", "противоречия", "проверь цифры", "конфликт данных"],
-    ChatMode.promises: ["обещали", "не сделали", "что планировали", "реестр планов"],
-    ChatMode.gaps: ["не видим", "пропустили", "серые зоны", "чего не хватает"],
-    ChatMode.write: ["напиши", "подготовь", "сделай документ", "составь записку"],
-    ChatMode.validate: ["проверь инициативу", "стоит ли", "оцени идею", "что думаешь"],
-    ChatMode.research: ["рынок", "конкуренты", "что делают другие", "внешний рынок"],
-}
+_MODE_CLASSIFIER_PROMPT = """\
+Определи режим обработки запроса пользователя к корпоративной базе знаний.
+
+Режимы:
+- search: общий поиск и синтез информации из корпуса (по умолчанию)
+- contradictions: пользователь ищет расхождения, конфликты или несоответствия в данных \
+(«две разные цифры», «не сходится», «кто прав», «разные версии», «противоречие»)
+- promises: пользователь спрашивает о планах, обещаниях, дедлайнах, что должно быть сделано \
+(«что планировали», «P0-задачи», «дедлайны», «что обещали», «что не сделали»)
+- gaps: пользователь ищет пробелы, слепые пятна, что упущено или не учтено \
+(«что не учли», «чего не хватает», «что пропустили», «какие риски не закрыты»)
+- write: пользователь просит написать или подготовить документ, тезисы, записку
+- validate: пользователь просит оценить инициативу, идею или предложение \
+(«оцени», «стоит ли», «что думаешь об инициативе», «проверь идею»)
+- research: пользователь спрашивает о конкурентах, рынке, внешнем контексте
+
+Ответь ОДНИМ словом — именем режима. Без пояснений.\
+"""
 
 
-def detect_mode(message: str) -> ChatMode:
-    lower = message.lower()
-    for mode, triggers in TRIGGER_WORDS.items():
-        if any(t in lower for t in triggers):
-            return mode
-    return ChatMode.search
+async def detect_mode(message: str) -> ChatMode:
+    try:
+        llm = get_llm()
+        response = await llm.messages.create(
+            model=settings.LLM_MODEL,
+            max_tokens=10,
+            system=_MODE_CLASSIFIER_PROMPT,
+            messages=[{"role": "user", "content": message}],
+        )
+        mode_str = response.content[0].text.strip().lower()
+        return ChatMode(mode_str)
+    except Exception:
+        return ChatMode.search
 
 
 def _decode_file(file_b64: str) -> str:
@@ -82,7 +101,7 @@ async def _run_validate(message: str, db: AsyncSession) -> dict:
 async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
     t0 = time.monotonic()
 
-    mode = request.mode or detect_mode(request.message)
+    mode = request.mode or await detect_mode(request.message)
     file_content = _decode_file(request.file) if request.file else None
 
     # validate → initiative_review
