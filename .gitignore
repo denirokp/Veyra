@@ -83,3 +83,14 @@ temp/
 *.pem
 *.key
 secrets/
+
+# Хроника — данные (не коммитим документы и индексы)
+data/corpus/*
+data/style_anchors/*
+!data/corpus/.gitkeep
+!data/style_anchors/.gitkeep
+data/chroma/
+data/*.db
+
+# Style profile (генерируется автоматически)
+backend/app/skills/style_profile.json
