@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -9,6 +10,20 @@ from app.storage.sql_db import init_db, mark_overdue_promises, AsyncSession, eng
 
 logger = logging.getLogger(__name__)
 
+_OVERDUE_INTERVAL_HOURS = 6
+
+
+async def _overdue_promises_loop() -> None:
+    while True:
+        await asyncio.sleep(_OVERDUE_INTERVAL_HOURS * 3600)
+        try:
+            async with AsyncSession(engine) as session:
+                n = await mark_overdue_promises(session)
+                if n:
+                    logger.info("Помечено просроченных обещаний: %d", n)
+        except Exception:
+            logger.exception("Ошибка при проверке просроченных обещаний")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -16,15 +31,19 @@ async def lifespan(app: FastAPI):
     async with AsyncSession(engine) as session:
         n = await mark_overdue_promises(session)
         if n:
-            logger.info("Помечено просроченных обещаний: %d", n)
+            logger.info("Помечено просроченных обещаний при старте: %d", n)
+    task = asyncio.create_task(_overdue_promises_loop())
     yield
+    task.cancel()
 
 
 app = FastAPI(title="Хроника API", version="0.1.0", lifespan=lifespan)
 
+from app.settings import settings as _settings
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # Server
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
+    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
 
 settings = Settings()
