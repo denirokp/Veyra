@@ -21,8 +21,9 @@ interface ContradictionItem {
   metric: string
   value_a: string
   value_b: string
-  document_a: { id: string; title: string }
-  document_b: { id: string; title: string }
+  period?: string
+  document_a: { id: string; title: string; hierarchy_level?: number }
+  document_b: { id: string; title: string; hierarchy_level?: number }
   status: Status
   created_at: string
 }

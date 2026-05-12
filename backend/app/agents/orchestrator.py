@@ -7,6 +7,8 @@ import time
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents import corpus as corpus_agent
+from uuid import UUID
+
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
 
 TRIGGER_WORDS: dict[ChatMode, list[str]] = {
@@ -56,7 +58,7 @@ async def _run_validate(message: str, db: AsyncSession) -> dict:
         facts.append(FactItem(
             statement=f"{anchor['title']}: {anchor['relevance']}",
             source=SourceRef(
-                document_id="00000000-0000-0000-0000-000000000000",  # type: ignore[arg-type]
+                document_id=UUID("00000000-0000-0000-0000-000000000000"),
                 title=anchor["title"],
                 status="actual",  # type: ignore[arg-type]
                 hierarchy_level=2,
