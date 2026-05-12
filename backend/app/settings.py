@@ -27,5 +27,8 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
+    # Feature flags
+    ENABLE_BACKGROUND_SIGNALS: bool = False  # find_contradictions + find_logic_signals on index
+
 
 settings = Settings()

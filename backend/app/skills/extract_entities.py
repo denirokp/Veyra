@@ -92,9 +92,9 @@ async def extract_and_save(
 
     await save_entities(db, rows)
 
-    # Проверяем числовые расхождения с уже существующими метриками
-    metrics = [r for r in rows if r["type"] == "metric"]
-    if metrics:
-        await check_and_save_contradictions(metrics, document_id, db)
+    if settings.ENABLE_BACKGROUND_SIGNALS:
+        metrics = [r for r in rows if r["type"] == "metric"]
+        if metrics:
+            await check_and_save_contradictions(metrics, document_id, db)
 
     return rows

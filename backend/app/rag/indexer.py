@@ -118,14 +118,16 @@ async def index_document(
         ],
     )
 
-    # Skills pipeline (импортируем здесь чтобы избежать циклических импортов)
+    from app.settings import settings as _settings
     from app.skills.extract_entities import extract_and_save
     from app.skills.track_promises import extract_and_save_promises
-    from app.skills.find_logic_signals import find_logic_signals_for_document
 
     await extract_and_save(text, document_id, document_metadata, db)
     await extract_and_save_promises(text, document_id, document_metadata, db)
-    await find_logic_signals_for_document(document_id, db)
+
+    if _settings.ENABLE_BACKGROUND_SIGNALS:
+        from app.skills.find_logic_signals import find_logic_signals_for_document
+        await find_logic_signals_for_document(document_id, db)
 
     return len(chunks)
 

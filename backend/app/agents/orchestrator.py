@@ -2,16 +2,16 @@
 from __future__ import annotations
 
 import base64
+import json
 import time
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents import corpus as corpus_agent
 from app.clients import get_llm
-from app.settings import settings
-from uuid import UUID
-
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
+from app.settings import settings
 
 _ROUTER_PROMPT = """\
 Проанализируй запрос пользователя к корпоративной базе знаний. Верни JSON:
@@ -45,8 +45,7 @@ async def route_request(message: str) -> tuple[ChatMode, list[str]]:
             system=_ROUTER_PROMPT,
             messages=[{"role": "user", "content": message}],
         )
-        import json as _json
-        data = _json.loads(response.content[0].text.strip())
+        data = json.loads(response.content[0].text.strip())
         mode = ChatMode(data.get("mode", "search"))
         subqueries = data.get("subqueries", [message])
         if not isinstance(subqueries, list) or not subqueries:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -176,9 +177,8 @@ async def _parse_llm_response(
             )
         else:
             # Если LLM не дал валидный номер — ставим заглушку, не теряем факт
-            from uuid import UUID as _UUID
             source = SourceRef(
-                document_id=_UUID("00000000-0000-0000-0000-000000000000"),
+                document_id=UUID("00000000-0000-0000-0000-000000000000"),
                 title="Источник не определён",
                 status="unknown",  # type: ignore[arg-type]
                 hierarchy_level=5,
