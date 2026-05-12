@@ -6,6 +6,7 @@ import type {
   CorpusStats,
   LogicSignal,
   InitiativeReviewResult,
+  MissingMetric,
 } from '../types'
 
 const api = axios.create({ baseURL: '/api' })
@@ -93,6 +94,14 @@ export async function reviewInitiative(
   text: string,
 ): Promise<InitiativeReviewResult> {
   const { data } = await api.post<InitiativeReviewResult>('/initiative-review', { title, text })
+  return data
+}
+
+export async function suggestMetrics(
+  title: string,
+  text: string,
+): Promise<MissingMetric[]> {
+  const { data } = await api.post<MissingMetric[]>('/initiative-review/metrics', { title, text })
   return data
 }
 

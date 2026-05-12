@@ -95,6 +95,22 @@ export interface InitiativeAnalogue {
   lesson: string
 }
 
+export interface MarketContext {
+  summary: string
+  market_trends?: string[]
+  competitors?: Array<{ name: string; approach: string }>
+  benchmarks?: string[]
+  risks?: string[]
+  _disclaimer?: string
+}
+
+export interface MissingMetric {
+  metric_name: string
+  why_needed: string
+  suggested_target?: string
+  priority: 'must_have' | 'nice_to_have'
+}
+
 export interface InitiativeReviewResult {
   summary: string
   strategic_anchors: InitiativeAnchor[]
@@ -102,6 +118,7 @@ export interface InitiativeReviewResult {
   gaps: InitiativeGap[]
   analogues: InitiativeAnalogue[]
   external_context: string
+  market_context?: MarketContext
   recommendation: { verdict: InitiativeVerdict; reasoning: string }
   metadata: {
     chunks_used: number

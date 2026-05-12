@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { reviewInitiative } from '../api/client'
+import { reviewInitiative, suggestMetrics } from '../api/client'
 import type {
   InitiativeReviewResult,
   InitiativeAnchor,
   InitiativeConflict,
   InitiativeGap,
   InitiativeAnalogue,
+  MarketContext,
+  MissingMetric,
 } from '../types'
 import clsx from 'clsx'
 
@@ -16,12 +18,7 @@ const VERDICT_CONFIG = {
   reject: { label: 'Отклонить', color: 'bg-red-900/60 text-red-300 border-red-700' },
 }
 
-const ALIGN_COLOR = {
-  supports: 'text-emerald-400',
-  neutral: 'text-zinc-400',
-  conflicts: 'text-red-400',
-}
-
+const ALIGN_COLOR = { supports: 'text-emerald-400', neutral: 'text-zinc-400', conflicts: 'text-red-400' }
 const ALIGN_ICON = { supports: '↑', neutral: '→', conflicts: '✗' }
 
 const GAP_TYPE_LABEL: Record<string, string> = {
@@ -38,15 +35,26 @@ const SEVERITY_COLOR = {
   low: 'bg-zinc-700 text-zinc-400',
 }
 
-function Section({ title, children, empty }: { title: string; children: React.ReactNode; empty?: boolean }) {
+function Section({
+  title,
+  children,
+  empty,
+  badge,
+}: {
+  title: string
+  children: React.ReactNode
+  empty?: boolean
+  badge?: string
+}) {
   return (
     <div className="space-y-2">
-      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{title}</h3>
-      {empty ? (
-        <p className="text-sm text-zinc-600 italic">Нет данных</p>
-      ) : (
-        children
-      )}
+      <div className="flex items-center gap-2">
+        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">{title}</h3>
+        {badge && (
+          <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-400">{badge}</span>
+        )}
+      </div>
+      {empty ? <p className="text-sm text-zinc-600 italic">Нет данных</p> : children}
     </div>
   )
 }
@@ -82,9 +90,7 @@ function ConflictCard({ c }: { c: InitiativeConflict }) {
 function GapBadge({ g }: { g: InitiativeGap }) {
   return (
     <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-3 space-y-1">
-      <span className="text-xs font-medium text-orange-400">
-        {GAP_TYPE_LABEL[g.gap_type] ?? g.gap_type}
-      </span>
+      <span className="text-xs font-medium text-orange-400">{GAP_TYPE_LABEL[g.gap_type] ?? g.gap_type}</span>
       <p className="text-sm text-zinc-300 leading-snug">{g.description}</p>
     </div>
   )
@@ -100,7 +106,101 @@ function AnalogueCard({ a }: { a: InitiativeAnalogue }) {
   )
 }
 
-function ReviewResult({ result }: { result: InitiativeReviewResult }) {
+function MarketBlock({ ctx }: { ctx: MarketContext }) {
+  if (!ctx.summary || ctx.summary === 'Нет данных') {
+    return <p className="text-sm text-zinc-600 italic">Нет данных</p>
+  }
+  return (
+    <div className="space-y-3">
+      {ctx._disclaimer && (
+        <p className="text-xs text-zinc-500 italic border-l-2 border-zinc-700 pl-2">{ctx._disclaimer}</p>
+      )}
+      <p className="text-sm text-zinc-200 leading-relaxed">{ctx.summary}</p>
+      {ctx.market_trends && ctx.market_trends.length > 0 && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-1">Тренды</p>
+          <ul className="space-y-0.5">
+            {ctx.market_trends.map((t, i) => (
+              <li key={i} className="text-xs text-zinc-300">• {t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {ctx.competitors && ctx.competitors.length > 0 && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-1">Конкуренты</p>
+          {ctx.competitors.map((c, i) => (
+            <div key={i} className="text-xs text-zinc-300">
+              <span className="text-zinc-100 font-medium">{c.name}:</span> {c.approach}
+            </div>
+          ))}
+        </div>
+      )}
+      {ctx.risks && ctx.risks.length > 0 && (
+        <div>
+          <p className="text-xs text-zinc-500 mb-1">Рыночные риски</p>
+          {ctx.risks.map((r, i) => (
+            <p key={i} className="text-xs text-yellow-400">⚠ {r}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function KpiSection({ title, text }: { title: string; text: string }) {
+  const mut = useMutation({ mutationFn: () => suggestMetrics(title, text) })
+
+  return (
+    <Section title="7. Недостающие KPI" badge="по запросу">
+      {!mut.data && (
+        <button
+          onClick={() => mut.mutate()}
+          disabled={mut.isPending}
+          className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700 transition-colors disabled:opacity-50"
+        >
+          {mut.isPending ? 'Анализирую KPI...' : 'Предложить недостающие KPI'}
+        </button>
+      )}
+      {mut.data && mut.data.length === 0 && (
+        <p className="text-sm text-zinc-600 italic">Все ключевые метрики присутствуют</p>
+      )}
+      {mut.data && mut.data.length > 0 && (
+        <div className="space-y-2">
+          {mut.data.map((m: MissingMetric, i: number) => (
+            <div key={i} className="rounded-lg border border-zinc-700 bg-zinc-800/40 p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-zinc-200">{m.metric_name}</span>
+                <span className={clsx(
+                  'text-xs px-1.5 py-0.5 rounded',
+                  m.priority === 'must_have'
+                    ? 'bg-red-900/50 text-red-300'
+                    : 'bg-zinc-700 text-zinc-400',
+                )}>
+                  {m.priority === 'must_have' ? 'must have' : 'nice to have'}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 leading-snug">{m.why_needed}</p>
+              {m.suggested_target && (
+                <p className="text-xs text-blue-400">Цель: {m.suggested_target}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+function ReviewResult({
+  result,
+  title,
+  text,
+}: {
+  result: InitiativeReviewResult
+  title: string
+  text: string
+}) {
   const verdict = VERDICT_CONFIG[result.recommendation.verdict]
   return (
     <div className="space-y-6">
@@ -109,61 +209,49 @@ function ReviewResult({ result }: { result: InitiativeReviewResult }) {
         <div className="flex items-center gap-3">
           <span className="text-base font-bold">{verdict.label}</span>
           <span className="text-xs opacity-70">
-            {result.metadata.chunks_used} чанков · {result.metadata.contradictions_found} расхождений · {result.metadata.logic_signals_found} сигналов
+            {result.metadata.chunks_used} чанков · {result.metadata.contradictions_found} расх. · {result.metadata.logic_signals_found} сигн.
           </span>
         </div>
         <p className="text-sm leading-relaxed opacity-90">{result.recommendation.reasoning}</p>
       </div>
 
-      {/* Блок 1: Суть */}
       <Section title="1. Суть инициативы">
         <p className="text-sm text-zinc-200 leading-relaxed">{result.summary}</p>
       </Section>
 
-      {/* Блок 2: Стратегические якоря */}
-      <Section
-        title="2. Стратегические документы"
-        empty={result.strategic_anchors.length === 0}
-      >
+      <Section title="2. Стратегические документы" empty={result.strategic_anchors.length === 0}>
         <div className="space-y-2">
           {result.strategic_anchors.map((a, i) => <AnchorCard key={i} a={a} />)}
         </div>
       </Section>
 
-      {/* Блок 3: Конфликты */}
-      <Section
-        title="3. Сигналы к проверке"
-        empty={result.conflicts.length === 0}
-      >
+      <Section title="3. Сигналы к проверке" empty={result.conflicts.length === 0}>
         <div className="space-y-2">
           {result.conflicts.map((c, i) => <ConflictCard key={i} c={c} />)}
         </div>
       </Section>
 
-      {/* Блок 4: Пробелы */}
-      <Section
-        title="4. Что не хватает"
-        empty={result.gaps.length === 0}
-      >
+      <Section title="4. Что не хватает" empty={result.gaps.length === 0}>
         <div className="grid grid-cols-1 gap-2">
           {result.gaps.map((g, i) => <GapBadge key={i} g={g} />)}
         </div>
       </Section>
 
-      {/* Блок 5: Аналоги */}
-      <Section
-        title="5. Аналоги в корпусе"
-        empty={result.analogues.length === 0}
-      >
+      <Section title="5. Аналоги в корпусе" empty={result.analogues.length === 0}>
         <div className="space-y-2">
           {result.analogues.map((a, i) => <AnalogueCard key={i} a={a} />)}
         </div>
       </Section>
 
-      {/* Блок 6: Внешний контекст */}
-      <Section title="6. Внешний контекст">
-        <p className="text-sm text-zinc-300 leading-relaxed">{result.external_context}</p>
+      <Section title="6. Внешний рыночный контекст">
+        {result.market_context ? (
+          <MarketBlock ctx={result.market_context} />
+        ) : (
+          <p className="text-sm text-zinc-300 leading-relaxed">{result.external_context}</p>
+        )}
       </Section>
+
+      <KpiSection title={title} text={text} />
     </div>
   )
 }
@@ -184,7 +272,9 @@ export function InitiativeReviewPage() {
       <div className="w-96 shrink-0 border-r border-zinc-800 flex flex-col p-5 gap-4">
         <div>
           <h2 className="text-base font-semibold text-zinc-100">Разбор инициативы</h2>
-          <p className="text-xs text-zinc-500 mt-0.5">7-блочный анализ через корпус документов</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            7-блочный анализ через корпус + рыночный контекст
+          </p>
         </div>
 
         <div className="space-y-1">
@@ -230,18 +320,22 @@ export function InitiativeReviewPage() {
         {!mut.data && !mut.isPending && (
           <div className="flex flex-col items-center justify-center h-full text-zinc-600 space-y-2">
             <p className="text-4xl">🔍</p>
-            <p className="text-sm">Введи название и текст инициативы — получишь разбор по 7 блокам</p>
+            <p className="text-sm">
+              Введи название и текст инициативы — получишь разбор по 7 блокам + рыночный контекст
+            </p>
           </div>
         )}
 
         {mut.isPending && (
           <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
-            <p className="text-sm">Анализирую корпус документов...</p>
+            <p className="text-sm">Анализирую корпус + рыночный контекст...</p>
           </div>
         )}
 
-        {mut.data && <ReviewResult result={mut.data} />}
+        {mut.data && (
+          <ReviewResult result={mut.data} title={title.trim()} text={text.trim()} />
+        )}
       </div>
     </div>
   )

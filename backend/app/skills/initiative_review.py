@@ -1,6 +1,7 @@
 """Skill: initiative_review — 7-блочный разбор инициативы через корпус документов."""
 from __future__ import annotations
 
+import asyncio
 import json
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.clients import get_llm
 from app.rag.retriever import retrieve
 from app.settings import settings
+from app.skills.market_agent import get_market_context
 from app.storage.sql_db import (
     get_open_contradictions_for_docs,
     get_open_logic_signals_for_docs,
@@ -120,24 +122,44 @@ async def run_initiative_review(
 ) -> dict:
     """
     Полный пайплайн initiative review:
-    1. Hybrid RAG по тексту инициативы
-    2. Загрузка открытых расхождений и сигналов для найденных документов
+    1. Hybrid RAG + Market Agent Lite (параллельно)
+    2. Загрузка расхождений, сигналов, сущностей
     3. LLM-анализ → 7 блоков
     """
-    # RAG: ищем релевантный контекст по всему тексту инициативы
     query = f"{title}\n{text[:500]}"
-    chunks = await retrieve(query, top_k=15, include_archive=True)
+
+    # Параллельно: RAG + Market Agent
+    chunks, market_ctx = await asyncio.gather(
+        retrieve(query, top_k=15, include_archive=True),
+        get_market_context(title),
+    )
 
     doc_ids = list({c.document_id for c in chunks})
 
-    # Параллельно тянем расхождения, сигналы и сущности
-    contradictions = await get_open_contradictions_for_docs(db, doc_ids) if doc_ids else []
-    logic_signals = await get_open_logic_signals_for_docs(db, doc_ids) if doc_ids else []
-
+    # Параллельно: расхождения + сигналы + сущности
     keywords = [w for w in title.lower().split() if len(w) > 3][:6]
-    entities = await search_entities_by_query(db, keywords, limit=15) if keywords else []
+
+    async def _empty() -> list:
+        return []
+
+    contradictions, logic_signals, entities = await asyncio.gather(
+        get_open_contradictions_for_docs(db, doc_ids) if doc_ids else _empty(),
+        get_open_logic_signals_for_docs(db, doc_ids) if doc_ids else _empty(),
+        search_entities_by_query(db, keywords, limit=15) if keywords else _empty(),
+    )
 
     context = _build_context(title, text, chunks, contradictions, logic_signals, entities)
+
+    # Добавляем рыночный контекст к промпту
+    if market_ctx.get("summary") and market_ctx["summary"] != "Нет данных":
+        market_lines = ["\n=== РЫНОЧНЫЙ КОНТЕКСТ (знания модели, гипотеза) ==="]
+        market_lines.append(f"Резюме: {market_ctx['summary']}")
+        if market_ctx.get("market_trends"):
+            market_lines.append("Тренды: " + "; ".join(market_ctx["market_trends"][:3]))
+        if market_ctx.get("competitors"):
+            for c in market_ctx["competitors"][:3]:
+                market_lines.append(f"• {c['name']}: {c['approach']}")
+        context += "\n" + "\n".join(market_lines)
 
     llm = get_llm()
     response = await llm.messages.create(
@@ -169,6 +191,7 @@ async def run_initiative_review(
 
     return {
         **result,
+        "market_context": market_ctx,
         "metadata": {
             "chunks_used": len(chunks),
             "doc_ids": doc_ids[:10],
