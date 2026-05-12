@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.skills.build_graph import build_document_graph
 from app.skills.find_gaps import find_gaps
 from app.storage.sql_db import Document, NumericContradiction, LogicSignal, Promise, get_session
 
@@ -58,3 +59,9 @@ async def corpus_stats(db: AsyncSession = Depends(get_session)):
 async def get_gaps(db: AsyncSession = Depends(get_session)):
     """Серые зоны — темы в корпусе, отсутствующие в текущей стратегии."""
     return await find_gaps(db)
+
+
+@router.get("/corpus/graph")
+async def get_graph(db: AsyncSession = Depends(get_session)):
+    """Граф связей между документами — узлы и рёбра по общим сущностям."""
+    return await build_document_graph(db)
