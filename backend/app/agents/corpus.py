@@ -55,10 +55,8 @@ source_id — это НОМЕР источника (1, 2, 3...) из загол�
 MODE_INSTRUCTIONS: dict[ChatMode, str] = {
     ChatMode.search: (
         "Найди и синтезируй всё что знает корпус по заданной теме. "
-        "ОБЯЗАТЕЛЬНО: после прямого ответа добавь в requires_verification "
-        "что НЕ учитывается в текущих планах, какие факторы влияния упущены, "
-        "где есть риск расхождения между планом и реальностью. "
-        "Если видишь документы которые противоречат друг другу — отметь в warnings."
+        "Если видишь документы которые противоречат друг другу — отметь в warnings. "
+        "requires_verification оставь пустым массивом."
     ),
     ChatMode.contradictions: (
         "Найди числовые расхождения по теме. "
@@ -129,6 +127,32 @@ def _build_entity_memory_block(entities: list, contradictions: list) -> str:
             )
 
     return "\n".join(lines)
+
+
+async def _call_corpus_llm(system: str, user_message: str, max_retries: int = 2) -> str:
+    """LLM-вызов с повторной попыткой при невалидном JSON (до max_retries раз)."""
+    llm = get_llm()
+    messages: list[dict] = [{"role": "user", "content": user_message}]
+    for attempt in range(max_retries + 1):
+        response = await llm.messages.create(
+            model=settings.LLM_MODEL,
+            max_tokens=4096,
+            system=system,
+            messages=messages,
+        )
+        raw = response.content[0].text.strip()
+        try:
+            json.loads(raw)
+            return raw
+        except json.JSONDecodeError:
+            if attempt == max_retries:
+                return raw
+            messages = [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": raw},
+                {"role": "user", "content": "Твой ответ не является валидным JSON. Верни ТОЛЬКО валидный JSON без markdown-обёртки."},
+            ]
+    return ""
 
 
 async def _parse_llm_response(
@@ -234,14 +258,7 @@ async def run(
         + f"\n\nВОПРОС: {message}"
     )
 
-    llm = get_llm()
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-    )
-    raw = response.content[0].text.strip()
+    raw = await _call_corpus_llm(SYSTEM_PROMPT, user_message)
 
     answer, facts, hypotheses, warnings, requires = await _parse_llm_response(
         raw, chunks, db
@@ -256,6 +273,10 @@ async def run(
     for doc_id, c in archive_chunks.items():
         label = c.title or doc_id[:8]
         warnings.append(f"⚠️ Использованы данные из архивного документа «{label}»")
+
+    # requires_verification показываем только в gaps-режиме
+    if mode != ChatMode.gaps:
+        requires = []
 
     return {
         "answer": answer,
