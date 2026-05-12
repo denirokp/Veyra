@@ -228,6 +228,64 @@ async def save_entities(session: AsyncSession, entities: list[dict]) -> None:
     await session.commit()
 
 
+async def search_entities_by_query(
+    session: AsyncSession,
+    keywords: list[str],
+    limit: int = 20,
+) -> list[Entity]:
+    """Поиск сущностей по ключевым словам из запроса для обогащения контекста."""
+    from sqlalchemy import select, or_
+    if not keywords:
+        return []
+    conditions = [
+        Entity.normalized_name.ilike(f"%{kw.lower()}%")
+        for kw in keywords[:8]
+    ]
+    q = (
+        select(Entity)
+        .where(or_(*conditions))
+        .order_by(Entity.confidence.desc())
+        .limit(limit)
+    )
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+async def get_open_contradictions_for_docs(
+    session: AsyncSession,
+    document_ids: list[str],
+) -> list[Contradiction]:
+    """Возвращает открытые расхождения для набора документов."""
+    from sqlalchemy import select, or_
+    if not document_ids:
+        return []
+    q = select(Contradiction).where(
+        Contradiction.status == "open",
+        or_(
+            Contradiction.document_id_a.in_(document_ids),
+            Contradiction.document_id_b.in_(document_ids),
+        ),
+    )
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+async def mark_overdue_promises(session: AsyncSession) -> int:
+    """При старте помечает просроченные open-обещания как overdue."""
+    from sqlalchemy import select, update
+    from datetime import date
+    today = date.today()
+    result = await session.execute(
+        update(Promise)
+        .where(Promise.status == "open", Promise.deadline < today)
+        .values(status="overdue")
+        .returning(Promise.id)
+    )
+    await session.commit()
+    rows = result.fetchall()
+    return len(rows)
+
+
 async def get_entities_for_metric(
     session: AsyncSession,
     metric_name: str,

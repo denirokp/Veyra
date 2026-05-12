@@ -1,15 +1,22 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import chat, contradictions, corpus, documents, promises
-from app.storage.sql_db import init_db
+from app.storage.sql_db import init_db, mark_overdue_promises, AsyncSession, engine
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    async with AsyncSession(engine) as session:
+        n = await mark_overdue_promises(session)
+        if n:
+            logger.info("Помечено просроченных обещаний: %d", n)
     yield
 
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.skills.find_gaps import find_gaps
 from app.storage.sql_db import Document, Contradiction, Promise, get_session
 
 router = APIRouter(tags=["corpus"])
@@ -44,3 +45,9 @@ async def corpus_stats(db: AsyncSession = Depends(get_session)):
         "open_contradictions": open_contradictions,
         "open_promises": open_promises,
     }
+
+
+@router.get("/corpus/gaps")
+async def get_gaps(db: AsyncSession = Depends(get_session)):
+    """Серые зоны — темы в корпусе, отсутствующие в текущей стратегии."""
+    return await find_gaps(db)

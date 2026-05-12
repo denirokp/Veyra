@@ -65,3 +65,8 @@ export async function getPromises(status?: string) {
   const { data } = await api.get('/promises', { params: { status } })
   return data
 }
+
+export async function getGaps() {
+  const { data } = await api.get('/corpus/gaps')
+  return data as Array<{ topic: string; reason: string; priority: 'high' | 'medium' | 'low' }>
+}

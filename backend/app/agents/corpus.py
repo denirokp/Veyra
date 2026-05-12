@@ -10,7 +10,11 @@ from app.clients import get_llm
 from app.models.schemas import ChatMode, ChatResponse, FactItem, SourceRef
 from app.rag.retriever import RetrievedChunk, retrieve
 from app.settings import settings
-from app.storage.sql_db import get_document
+from app.storage.sql_db import (
+    get_document,
+    get_open_contradictions_for_docs,
+    search_entities_by_query,
+)
 
 SYSTEM_PROMPT = """\
 Ты аналитик корпоративной памяти команды Avito. У тебя есть доступ к корпусу \
@@ -79,6 +83,32 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
+def _build_entity_memory_block(entities: list, contradictions: list) -> str:
+    """Формирует блок entity memory для добавления в промпт."""
+    if not entities and not contradictions:
+        return ""
+
+    lines = ["[ENTITY MEMORY — известные факты из корпуса]"]
+
+    if entities:
+        lines.append("Метрики и сущности:")
+        for e in entities[:15]:
+            val = f" = {e.value}" if e.value else ""
+            unit = f" {e.unit}" if e.unit else ""
+            date = f" ({e.date_context})" if e.date_context else ""
+            lines.append(f"  • {e.name}{val}{unit}{date} [doc:{e.document_id[:8]}...]")
+
+    if contradictions:
+        lines.append("Известные расхождения по этим документам:")
+        for c in contradictions[:5]:
+            lines.append(
+                f"  ⚠ {c.metric}: {c.value_a} vs {c.value_b} "
+                f"[doc:{c.document_id_a[:8]} vs doc:{c.document_id_b[:8]}]"
+            )
+
+    return "\n".join(lines)
+
+
 async def _parse_llm_response(
     raw: str,
     chunks: list[RetrievedChunk],
@@ -141,6 +171,15 @@ async def run(
     include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
     chunks = await retrieve(message, top_k=10, include_archive=include_archive)
 
+    # Entity memory — обогащаем контекст релевантными сущностями
+    entity_block = ""
+    if db is not None:
+        keywords = [w for w in message.split() if len(w) > 3]
+        entities = await search_entities_by_query(db, keywords, limit=20)
+        doc_ids = list({c.document_id for c in chunks})
+        contradictions_in_scope = await get_open_contradictions_for_docs(db, doc_ids)
+        entity_block = _build_entity_memory_block(entities, contradictions_in_scope)
+
     # Если загружен файл — добавляем его текст к запросу
     extra_context = ""
     if file_content:
@@ -153,8 +192,9 @@ async def run(
         f"Режим: {mode.value}\n"
         f"Инструкция: {mode_instruction}\n\n"
         f"КОРПУС ДОКУМЕНТОВ:\n{context}"
-        f"{extra_context}\n\n"
-        f"ВОПРОС: {message}"
+        + (f"\n\n{entity_block}" if entity_block else "")
+        + extra_context
+        + f"\n\nВОПРОС: {message}"
     )
 
     llm = get_llm()
