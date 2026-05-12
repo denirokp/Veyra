@@ -1,0 +1,85 @@
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.yarn/cache
+.npm
+dist/
+.next/
+.nuxt/
+.cache/
+
+# Rust
+target/
+Cargo.lock
+
+# Go
+*.exe
+*.test
+*.out
+vendor/
+
+# Java / Kotlin
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+out/
+.gradle/
+
+# Logs & temp
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
