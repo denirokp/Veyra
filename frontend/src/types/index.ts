@@ -66,5 +66,19 @@ export interface CorpusStats {
   by_status: Record<DocumentStatus, number>
   anchor_documents: number
   open_contradictions: number
+  open_logic_signals: number
   open_promises: number
+}
+
+export interface LogicSignal {
+  id: string
+  signal_type: 'strategic' | 'operational' | 'priority' | 'client'
+  statement_a: string
+  statement_b: string
+  document_a: { id: string; title: string; hierarchy_level: number | null; created_at: string | null }
+  document_b: { id: string; title: string; hierarchy_level: number | null; created_at: string | null }
+  confidence: number
+  status: 'open' | 'reviewed' | 'dismissed'
+  review_notes: string | null
+  created_at: string
 }

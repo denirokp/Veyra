@@ -1,4 +1,4 @@
-"""SQLite schema — documents, chunks, entities, contradictions, promises, graph, style_feedback."""
+"""SQLite schema — v4.0: numeric_contradictions, logic_signals, updated entity types."""
 from sqlalchemy import (
     Boolean, Column, Date, DateTime, Float, ForeignKey,
     Integer, String, Text, func,
@@ -71,8 +71,8 @@ class Entity(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
-class Contradiction(Base):
-    __tablename__ = "contradictions"
+class NumericContradiction(Base):
+    __tablename__ = "numeric_contradictions"
 
     id = Column(String, primary_key=True)
     metric = Column(Text, nullable=False)
@@ -80,10 +80,30 @@ class Contradiction(Base):
     value_b = Column(Text)
     document_id_a = Column(String, ForeignKey("documents.id"))
     document_id_b = Column(String, ForeignKey("documents.id"))
-    status = Column(String, default="open")
-    resolved_by = Column(String)
+    period = Column(Text)
+    status = Column(String, default="open")  # open | resolved | dismissed
+    resolved_by = Column(String, ForeignKey("documents.id"), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     resolved_at = Column(DateTime)
+
+
+# Backward-compat alias — код написанный с Contradiction продолжает работать
+Contradiction = NumericContradiction
+
+
+class LogicSignal(Base):
+    __tablename__ = "logic_signals"
+
+    id = Column(String, primary_key=True)
+    signal_type = Column(String)  # strategic | operational | priority | client
+    statement_a = Column(Text)
+    statement_b = Column(Text)
+    document_id_a = Column(String, ForeignKey("documents.id"))
+    document_id_b = Column(String, ForeignKey("documents.id"))
+    status = Column(String, default="open")  # open | reviewed | dismissed
+    review_notes = Column(Text)
+    confidence = Column(Float)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class Promise(Base):
@@ -319,6 +339,53 @@ async def list_contradictions(
     if status:
         q = q.where(Contradiction.status == status)
     q = q.order_by(Contradiction.created_at.desc())
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+# ── Logic Signals CRUD ───────────────────────────────────────────────────────
+
+async def save_logic_signal(session: AsyncSession, data: dict) -> LogicSignal:
+    s = LogicSignal(**data)
+    session.add(s)
+    await session.commit()
+    return s
+
+
+async def save_logic_signals(session: AsyncSession, signals: list[dict]) -> None:
+    if not signals:
+        return
+    for s in signals:
+        session.add(LogicSignal(**s))
+    await session.commit()
+
+
+async def list_logic_signals(
+    session: AsyncSession, status: str | None = None
+) -> list[LogicSignal]:
+    from sqlalchemy import select
+    q = select(LogicSignal)
+    if status:
+        q = q.where(LogicSignal.status == status)
+    q = q.order_by(LogicSignal.confidence.desc().nullslast(), LogicSignal.created_at.desc())
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+async def get_open_logic_signals_for_docs(
+    session: AsyncSession,
+    document_ids: list[str],
+) -> list[LogicSignal]:
+    from sqlalchemy import select, or_
+    if not document_ids:
+        return []
+    q = select(LogicSignal).where(
+        LogicSignal.status == "open",
+        or_(
+            LogicSignal.document_id_a.in_(document_ids),
+            LogicSignal.document_id_b.in_(document_ids),
+        ),
+    )
     result = await session.execute(q)
     return list(result.scalars().all())
 

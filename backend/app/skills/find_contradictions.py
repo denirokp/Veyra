@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.storage.sql_db import Entity, save_contradiction
+from app.storage.sql_db import Entity, NumericContradiction, save_contradiction
 
 
 def _values_conflict(val_a: str | None, val_b: str | None) -> bool:
@@ -78,6 +78,7 @@ async def check_and_save_contradictions(
                 "value_b": existing_entity.value,
                 "document_id_a": new_document_id,
                 "document_id_b": existing_entity.document_id,
+                "period": metric.get("date_context"),
                 "status": "open",
             }
             await save_contradiction(db, contradiction)

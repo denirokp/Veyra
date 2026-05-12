@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.skills.find_gaps import find_gaps
-from app.storage.sql_db import Document, Contradiction, Promise, get_session
+from app.storage.sql_db import Document, NumericContradiction, LogicSignal, Promise, get_session
 
 router = APIRouter(tags=["corpus"])
 
@@ -26,9 +26,15 @@ async def corpus_stats(db: AsyncSession = Depends(get_session)):
         )
     ).scalar()
 
-    open_contradictions = (
+    open_numeric = (
         await db.execute(
-            select(func.count(Contradiction.id)).where(Contradiction.status == "open")
+            select(func.count(NumericContradiction.id)).where(NumericContradiction.status == "open")
+        )
+    ).scalar()
+
+    open_logic = (
+        await db.execute(
+            select(func.count(LogicSignal.id)).where(LogicSignal.status == "open")
         )
     ).scalar()
 
@@ -42,7 +48,8 @@ async def corpus_stats(db: AsyncSession = Depends(get_session)):
         "total_documents": total,
         "by_status": by_status,
         "anchor_documents": anchors,
-        "open_contradictions": open_contradictions,
+        "open_contradictions": open_numeric,
+        "open_logic_signals": open_logic,
         "open_promises": open_promises,
     }
 

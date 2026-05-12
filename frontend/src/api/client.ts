@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { ChatRequest, ChatResponse, Document, CorpusStats } from '../types'
+import type { ChatRequest, ChatResponse, Document, CorpusStats, LogicSignal } from '../types'
 
 const api = axios.create({ baseURL: '/api' })
 
@@ -57,8 +57,23 @@ export async function getCorpusStats(): Promise<CorpusStats> {
 }
 
 export async function getContradictions(status?: string) {
-  const { data } = await api.get('/contradictions', { params: { status } })
+  const { data } = await api.get('/contradictions/numeric', { params: { status } })
   return data
+}
+
+export async function getLogicSignals(status?: string): Promise<LogicSignal[]> {
+  const { data } = await api.get<LogicSignal[]>('/contradictions/logic', { params: { status } })
+  return data
+}
+
+export async function updateLogicSignal(
+  id: string,
+  status: 'reviewed' | 'dismissed',
+  review_notes?: string,
+): Promise<void> {
+  await api.patch(`/contradictions/logic/${id}`, null, {
+    params: { status, review_notes },
+  })
 }
 
 export async function getPromises(status?: string) {

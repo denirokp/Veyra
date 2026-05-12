@@ -3,13 +3,14 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { ChatPage } from './pages/ChatPage'
 import { CorpusPage } from './pages/CorpusPage'
 import { ContradictionsPage } from './pages/ContradictionsPage'
+import { LogicSignalsPage } from './pages/LogicSignalsPage'
 import { PromisesPage } from './pages/PromisesPage'
 import { getCorpusStats } from './api/client'
 import clsx from 'clsx'
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
 
-type Tab = 'chat' | 'corpus' | 'contradictions' | 'promises'
+type Tab = 'chat' | 'corpus' | 'contradictions' | 'logic' | 'promises'
 
 function NavItem({
   id,
@@ -76,6 +77,13 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
         onClick={setTab}
       />
       <NavItem
+        id="logic"
+        label="🔍 Сигналы"
+        badge={stats?.open_logic_signals}
+        current={tab}
+        onClick={setTab}
+      />
+      <NavItem
         id="promises"
         label="📋 Обещания"
         badge={stats?.open_promises}
@@ -97,6 +105,7 @@ export default function App() {
           {tab === 'chat' && <ChatPage />}
           {tab === 'corpus' && <CorpusPage />}
           {tab === 'contradictions' && <ContradictionsPage />}
+          {tab === 'logic' && <LogicSignalsPage />}
           {tab === 'promises' && <PromisesPage />}
         </main>
       </div>
