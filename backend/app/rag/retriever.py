@@ -37,6 +37,14 @@ class RetrievedChunk:
         return self.metadata.get("title", "")
 
 
+def fuse_results(
+    *ranked_lists: list[RetrievedChunk], top_k: int = 15
+) -> list[RetrievedChunk]:
+    """Публичный RRF + hierarchy boost для слияния нескольких retrieval-результатов."""
+    fused = _reciprocal_rank_fusion(*ranked_lists)
+    return _apply_hierarchy_boost(fused)[:top_k]
+
+
 def _reciprocal_rank_fusion(
     *ranked_lists: list[RetrievedChunk], k: int = 60
 ) -> list[RetrievedChunk]:

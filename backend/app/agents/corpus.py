@@ -1,6 +1,7 @@
 """Corpus Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients import get_llm
 from app.models.schemas import ChatMode, ChatResponse, FactItem, SourceRef
-from app.rag.retriever import RetrievedChunk, retrieve
+from app.rag.retriever import RetrievedChunk, fuse_results, retrieve
 from app.settings import settings
 from app.storage.sql_db import (
     get_document,
@@ -191,12 +192,21 @@ async def _parse_llm_response(
 async def run(
     message: str,
     mode: ChatMode,
+    subqueries: list[str] | None = None,
     file_content: str | None = None,
     db: AsyncSession | None = None,
 ) -> dict:
-    # Поиск релевантных чанков
+    # Параллельный retrieval по подзапросам → RRF fusion
     include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
-    chunks = await retrieve(message, top_k=15, include_archive=include_archive)
+    queries = subqueries or [message]
+    if len(queries) == 1:
+        chunks = await retrieve(queries[0], top_k=15, include_archive=include_archive)
+    else:
+        results = await asyncio.gather(*[
+            retrieve(q, top_k=10, include_archive=include_archive)
+            for q in queries
+        ])
+        chunks = fuse_results(*results, top_k=15)
 
     # Entity memory — обогащаем контекст релевантными сущностями
     entity_block = ""

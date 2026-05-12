@@ -13,39 +13,47 @@ from uuid import UUID
 
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
 
-_MODE_CLASSIFIER_PROMPT = """\
-Определи режим обработки запроса пользователя к корпоративной базе знаний.
+_ROUTER_PROMPT = """\
+Проанализируй запрос пользователя к корпоративной базе знаний. Верни JSON:
+{
+  "mode": "режим",
+  "subqueries": ["подзапрос 1", "подзапрос 2"]
+}
 
 Режимы:
-- search: общий поиск и синтез информации из корпуса (по умолчанию)
-- contradictions: пользователь ищет расхождения, конфликты или несоответствия в данных \
-(«две разные цифры», «не сходится», «кто прав», «разные версии», «противоречие»)
-- promises: пользователь спрашивает о планах, обещаниях, дедлайнах, что должно быть сделано \
-(«что планировали», «P0-задачи», «дедлайны», «что обещали», «что не сделали»)
-- gaps: пользователь ищет пробелы, слепые пятна, что упущено или не учтено \
-(«что не учли», «чего не хватает», «что пропустили», «какие риски не закрыты»)
-- write: пользователь просит написать или подготовить документ, тезисы, записку
-- validate: пользователь просит оценить инициативу, идею или предложение \
-(«оцени», «стоит ли», «что думаешь об инициативе», «проверь идею»)
-- research: пользователь спрашивает о конкурентах, рынке, внешнем контексте
+- search: общий поиск и синтез (по умолчанию)
+- contradictions: расхождения, несоответствия, «две разные цифры», «не сходится», «кто прав»
+- promises: планы, дедлайны, обещания, «что должно быть», «P0-задачи», «что не сделали»
+- gaps: пробелы, что упустили, «что не учли», «чего не хватает», «какие риски не закрыты»
+- write: написать или подготовить документ, тезисы, записку
+- validate: оценить инициативу или идею, «стоит ли», «оцени идею», «проверь инициативу»
+- research: конкуренты, рынок, внешний контекст
 
-Ответь ОДНИМ словом — именем режима. Без пояснений.\
+subqueries: разбей запрос на 2-3 конкретных аспекта для параллельного поиска.
+Для простых однозначных вопросов — один элемент равный оригинальному запросу.
+Только JSON, без пояснений.\
 """
 
 
-async def detect_mode(message: str) -> ChatMode:
+async def route_request(message: str) -> tuple[ChatMode, list[str]]:
+    """Один LLM-вызов: определяет режим и декомпозирует запрос на подзапросы."""
     try:
         llm = get_llm()
         response = await llm.messages.create(
             model=settings.LLM_MODEL,
-            max_tokens=10,
-            system=_MODE_CLASSIFIER_PROMPT,
+            max_tokens=200,
+            system=_ROUTER_PROMPT,
             messages=[{"role": "user", "content": message}],
         )
-        mode_str = response.content[0].text.strip().lower()
-        return ChatMode(mode_str)
+        import json as _json
+        data = _json.loads(response.content[0].text.strip())
+        mode = ChatMode(data.get("mode", "search"))
+        subqueries = data.get("subqueries", [message])
+        if not isinstance(subqueries, list) or not subqueries:
+            subqueries = [message]
+        return mode, [str(q) for q in subqueries[:3]]
     except Exception:
-        return ChatMode.search
+        return ChatMode.search, [message]
 
 
 def _decode_file(file_b64: str) -> str:
@@ -101,16 +109,21 @@ async def _run_validate(message: str, db: AsyncSession) -> dict:
 async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
     t0 = time.monotonic()
 
-    mode = request.mode or await detect_mode(request.message)
     file_content = _decode_file(request.file) if request.file else None
 
-    # validate → initiative_review
+    if request.mode:
+        mode, subqueries = request.mode, [request.message]
+    else:
+        mode, subqueries = await route_request(request.message)
+
+    # validate → initiative_review (без декомпозиции)
     if mode == ChatMode.validate:
         result = await _run_validate(request.message, db)
     else:
         result = await corpus_agent.run(
             message=request.message,
             mode=mode,
+            subqueries=subqueries,
             file_content=file_content,
             db=db,
         )
