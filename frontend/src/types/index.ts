@@ -39,9 +39,11 @@ export interface ChatRequest {
 
 export interface Message {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   response?: ChatResponse
+  uploadedDoc?: Document
+  uploadReview?: InitiativeReviewResult
   timestamp: Date
 }
 
