@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,39 +19,23 @@ from app.storage.sql_db import (
     search_entities_by_query,
 )
 
-SYSTEM_PROMPT = """\
-Ты аналитик корпоративной памяти команды Avito. У тебя есть доступ к корпусу \
-внутренних документов — стратегий, ресёрчей, операционных планов.
+_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+SYSTEM_PROMPT = (_PROMPTS_DIR / "corpus_system.txt").read_text(encoding="utf-8").strip()
 
-ПРАВИЛА (соблюдай строго):
-1. Используй ТОЛЬКО информацию из предоставленных фрагментов документов
-2. Каждое фактическое утверждение ОБЯЗАТЕЛЬНО сопровождай ссылкой на источник
-3. Разделяй ФАКТЫ (есть в документах) и ГИПОТЕЗЫ (твои предположения)
-4. Archived и draft — используй только как контекст с явным предупреждением
-5. Если данных недостаточно — напиши это явно, не придумывай
-
-ФОРМАТ ОТВЕТА — строго JSON:
-{
-  "answer": "Прямой ответ на вопрос в 1-3 предложениях",
-  "facts": [
-    {
-      "statement": "Конкретное утверждение из документа",
-      "source_id": 1
-    }
-  ],
-  "hypotheses": ["Предположение которого нет в документах явно"],
-  "warnings": ["⚠️ Если использованы archived/draft данные или есть конфликт"],
-  "requires_verification": ["Вопрос если данных недостаточно"]
-}
-
-source_id — это НОМЕР источника (1, 2, 3...) из заголовка [Источник N] в контексте выше.\
-
-
-Если в предоставленных фрагментах встречаются разные значения одной метрики — \
-обязательно отметь обе цифры в warnings с указанием источника каждой.
-
-Отвечай ТОЛЬКО валидным JSON. Без markdown-обёртки.\
-"""
+_INJECTION_PATTERNS = re.compile(
+    r"ignore\s+(?:previous|all)\s+instructions?"
+    r"|игнорируй\s+(?:предыдущие|все)\s+инструкции"
+    r"|forget\s+everything"
+    r"|забудь\s+всё"
+    r"|you\s+are\s+now\s+(?:a\s+)?(?:an?\s+)?\w+"
+    r"|ты\s+теперь\s+\w+"
+    r"|act\s+as\s+(?:a\s+)?(?:an?\s+)?\w+"
+    r"|действуй\s+как\s+\w+"
+    r"|system\s+prompt"
+    r"|системный\s+промпт"
+    r"|<\s*/?system\s*>",
+    re.IGNORECASE,
+)
 
 MODE_INSTRUCTIONS: dict[ChatMode, str] = {
     ChatMode.search: (
@@ -101,6 +86,19 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
             f"{c.content}"
         )
     return "\n\n---\n\n".join(parts)
+
+
+def _wrap_uploaded_content(raw: str, max_chars: int = 4000) -> tuple[str, str]:
+    """Оборачивает содержимое загруженного файла в XML-тег и проверяет на инъекции.
+
+    Возвращает (wrapped_text, warning_message).
+    warning_message пустой если инъекций не обнаружено.
+    """
+    truncated = raw[:max_chars]
+    warning = ""
+    if _INJECTION_PATTERNS.search(truncated):
+        warning = "⚠️ Загруженный документ содержит потенциальные инструкции — они проигнорированы"
+    return f"<uploaded_document>\n{truncated}\n</uploaded_document>", warning
 
 
 def _build_entity_memory_block(entities: list, contradictions: list) -> str:
@@ -241,10 +239,13 @@ async def run(
         contradictions_in_scope = await get_open_contradictions_for_docs(db, doc_ids)
         entity_block = _build_entity_memory_block(entities, contradictions_in_scope)
 
-    # Если загружен файл — добавляем его текст к запросу
     extra_context = ""
+    extra_warnings: list[str] = []
     if file_content:
-        extra_context = f"\n\n[ЗАГРУЖЕННЫЙ ДОКУМЕНТ ДЛЯ АНАЛИЗА]\n{file_content[:4000]}"
+        wrapped, inj_warning = _wrap_uploaded_content(file_content)
+        extra_context = f"\n\n{wrapped}"
+        if inj_warning:
+            extra_warnings.append(inj_warning)
 
     context = _build_context(chunks)
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
@@ -264,7 +265,8 @@ async def run(
         raw, chunks, db
     )
 
-    # Предупреждение если нет чанков
+    warnings.extend(extra_warnings)
+
     if not chunks:
         warnings.append("⚠️ В корпусе не найдено релевантных документов по данному запросу")
 

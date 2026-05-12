@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import time
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,28 +14,8 @@ from app.clients import get_llm
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
 from app.settings import settings
 
-_ROUTER_PROMPT = """\
-Проанализируй запрос пользователя к корпоративной базе знаний. Верни JSON:
-{
-  "mode": "режим",
-  "subqueries": ["подзапрос 1"]
-}
-
-Режимы:
-- search: общий поиск и синтез (по умолчанию)
-- contradictions: расхождения, несоответствия, «две разные цифры», «не сходится», «кто прав»
-- promises: планы, дедлайны, обещания, «что должно быть», «P0-задачи», «что не сделали»
-- gaps: пробелы, что упустили, «что не учли», «чего не хватает», «какие риски не закрыты»
-- write: написать или подготовить документ, тезисы, записку
-- validate: оценить инициативу или идею, «стоит ли», «оцени идею», «проверь инициативу»
-- research: конкуренты, рынок, внешний контекст
-
-subqueries — правило:
-- 1 элемент: простой вопрос о конкретном факте или определении
-- 2 элемента: сравнение двух сущностей / периодов / подходов
-- 3 элемента: многоаспектный вопрос (стратегия + метрики + риски, и т.п.)
-Никогда не возвращай более 3 элементов. Только JSON, без пояснений.\
-"""
+_PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+_ROUTER_PROMPT = (_PROMPTS_DIR / "router.txt").read_text(encoding="utf-8").strip()
 
 
 async def route_request(message: str) -> tuple[ChatMode, list[str]]:
