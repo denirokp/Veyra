@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import chat, contradictions, corpus, documents, promises
+from app.api import chat, contradictions, corpus, documents, initiative, promises
 from app.storage.sql_db import init_db, mark_overdue_promises, AsyncSession, engine
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ app.include_router(documents.router, prefix="/api")
 app.include_router(contradictions.router, prefix="/api")
 app.include_router(promises.router, prefix="/api")
 app.include_router(corpus.router, prefix="/api")
+app.include_router(initiative.router, prefix="/api")
 
 
 @app.get("/health")

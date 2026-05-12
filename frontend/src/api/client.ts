@@ -1,5 +1,12 @@
 import axios from 'axios'
-import type { ChatRequest, ChatResponse, Document, CorpusStats, LogicSignal } from '../types'
+import type {
+  ChatRequest,
+  ChatResponse,
+  Document,
+  CorpusStats,
+  LogicSignal,
+  InitiativeReviewResult,
+} from '../types'
 
 const api = axios.create({ baseURL: '/api' })
 
@@ -78,6 +85,14 @@ export async function updateLogicSignal(
 
 export async function getPromises(status?: string) {
   const { data } = await api.get('/promises', { params: { status } })
+  return data
+}
+
+export async function reviewInitiative(
+  title: string,
+  text: string,
+): Promise<InitiativeReviewResult> {
+  const { data } = await api.post<InitiativeReviewResult>('/initiative-review', { title, text })
   return data
 }
 

@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { ChatPage } from './pages/ChatPage'
 import { CorpusPage } from './pages/CorpusPage'
 import { ContradictionsPage } from './pages/ContradictionsPage'
+import { InitiativeReviewPage } from './pages/InitiativeReviewPage'
 import { LogicSignalsPage } from './pages/LogicSignalsPage'
 import { PromisesPage } from './pages/PromisesPage'
 import { getCorpusStats } from './api/client'
@@ -10,7 +11,7 @@ import clsx from 'clsx'
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
 
-type Tab = 'chat' | 'corpus' | 'contradictions' | 'logic' | 'promises'
+type Tab = 'chat' | 'corpus' | 'initiative' | 'contradictions' | 'logic' | 'promises'
 
 function NavItem({
   id,
@@ -65,6 +66,7 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 
       <NavItem id="chat" label="💬 Чат" current={tab} onClick={setTab} />
       <NavItem id="corpus" label="📚 Корпус" current={tab} onClick={setTab} />
+      <NavItem id="initiative" label="🚀 Инициативы" current={tab} onClick={setTab} />
 
       <div className="px-3 pt-3 pb-1 text-xs font-medium text-zinc-600 uppercase tracking-wider">
         Аналитика
@@ -104,6 +106,7 @@ export default function App() {
         <main className="flex-1 overflow-hidden">
           {tab === 'chat' && <ChatPage />}
           {tab === 'corpus' && <CorpusPage />}
+          {tab === 'initiative' && <InitiativeReviewPage />}
           {tab === 'contradictions' && <ContradictionsPage />}
           {tab === 'logic' && <LogicSignalsPage />}
           {tab === 'promises' && <PromisesPage />}

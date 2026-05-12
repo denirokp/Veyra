@@ -70,6 +70,47 @@ export interface CorpusStats {
   open_promises: number
 }
 
+export type InitiativeVerdict = 'approve' | 'needs_work' | 'reject'
+
+export interface InitiativeAnchor {
+  title: string
+  relevance: string
+  alignment: 'supports' | 'neutral' | 'conflicts'
+}
+
+export interface InitiativeConflict {
+  description: string
+  severity: 'high' | 'medium' | 'low'
+  source?: string
+}
+
+export interface InitiativeGap {
+  gap_type: 'metric' | 'owner' | 'deadline' | 'resource' | 'market_validation'
+  description: string
+}
+
+export interface InitiativeAnalogue {
+  title: string
+  outcome: string
+  lesson: string
+}
+
+export interface InitiativeReviewResult {
+  summary: string
+  strategic_anchors: InitiativeAnchor[]
+  conflicts: InitiativeConflict[]
+  gaps: InitiativeGap[]
+  analogues: InitiativeAnalogue[]
+  external_context: string
+  recommendation: { verdict: InitiativeVerdict; reasoning: string }
+  metadata: {
+    chunks_used: number
+    doc_ids: string[]
+    contradictions_found: number
+    logic_signals_found: number
+  }
+}
+
 export interface LogicSignal {
   id: string
   signal_type: 'strategic' | 'operational' | 'priority' | 'client'
