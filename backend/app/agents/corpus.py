@@ -1,51 +1,190 @@
-"""Corpus Agent — RAG поиск, граф, entity memory."""
+"""Corpus Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой."""
 from __future__ import annotations
 
-from app.models.schemas import ChatMode, FactItem, SourceRef
+import json
+import re
 
-SYSTEM_PROMPT = """
-Ты аналитик с полным доступом к корпусу документов команды.
+from sqlalchemy.ext.asyncio import AsyncSession
 
-Правила:
-- Используй только actual документы для фактических утверждений
-- Archived и draft используй только как исторический контекст с явным предупреждением
-- superseded документы не используй никогда
-- Каждый факт = ссылка на документ + его уровень (L1–L6)
-- Если данных недостаточно — напиши это явно
-- Никогда не придумывай то чего нет в корпусе
+from app.clients import get_llm
+from app.models.schemas import ChatMode, ChatResponse, FactItem, SourceRef
+from app.rag.retriever import RetrievedChunk, retrieve
+from app.settings import settings
+from app.storage.sql_db import get_document
 
-Формат ответа строго:
-[Прямой ответ на вопрос]
+SYSTEM_PROMPT = """\
+Ты аналитик корпоративной памяти команды Avito. У тебя есть доступ к корпусу \
+внутренних документов — стратегий, ресёрчей, операционных планов.
 
-━━━ ФАКТЫ ━━━
-• [утверждение] — [↗ Документ · статус · уровень · дата]
+ПРАВИЛА (соблюдай строго):
+1. Используй ТОЛЬКО информацию из предоставленных фрагментов документов
+2. Каждое фактическое утверждение ОБЯЗАТЕЛЬНО сопровождай ссылкой на источник
+3. Разделяй ФАКТЫ (есть в документах) и ГИПОТЕЗЫ (твои предположения)
+4. Archived и draft — используй только как контекст с явным предупреждением
+5. Если данных недостаточно — напиши это явно, не придумывай
 
-━━━ ГИПОТЕЗЫ ━━━
-• [предположение]
+ФОРМАТ ОТВЕТА — строго JSON:
+{
+  "answer": "Прямой ответ на вопрос в 1-3 предложениях",
+  "facts": [
+    {
+      "statement": "Конкретное утверждение из документа",
+      "source_id": "chunk_document_id из контекста"
+    }
+  ],
+  "hypotheses": ["Предположение которого нет в документах явно"],
+  "warnings": ["⚠️ Если использованы archived/draft данные или есть конфликт"],
+  "requires_verification": ["Вопрос если данных недостаточно"]
+}
 
-━━━ ПРЕДУПРЕЖДЕНИЯ ━━━
-• ⚠️ ...
-
-━━━ ТРЕБУЕТ ПРОВЕРКИ ━━━
-• ...
+Отвечай ТОЛЬКО валидным JSON. Без markdown-обёртки.\
 """
 
-AVAILABLE_TOOLS = [
-    "vector_search",
-    "graph_walk",
-    "get_entity_memory",
-    "get_contradictions",
-    "get_promises",
-    "extract_entities_from_text",
-    "find_numeric_contradictions",
-    "find_gaps",
-]
+MODE_INSTRUCTIONS: dict[ChatMode, str] = {
+    ChatMode.search: "Найди и синтезируй всё что знает корпус по заданной теме.",
+    ChatMode.contradictions: (
+        "Найди числовые расхождения по теме. "
+        "В facts укажи разные цифры из разных документов. "
+        "В warnings — явно отметь каждое расхождение."
+    ),
+    ChatMode.promises: (
+        "Найди все обещания и планы по теме. "
+        "Для каждого: точная цитата, документ, срок если есть."
+    ),
+    ChatMode.gaps: (
+        "Найди темы которые обсуждались в корпусе но не вошли в текущую стратегию. "
+        "Ранжируй по недавности и количеству упоминаний."
+    ),
+    ChatMode.write: (
+        "Ты помогаешь написать документ. "
+        "Собери все релевантные факты из корпуса для использования в тексте."
+    ),
+    ChatMode.validate: (
+        "Оцени инициативу на основе корпуса. "
+        "Укажи: что уже изучали, что противоречит, что поддерживает."
+    ),
+}
+
+
+def _build_context(chunks: list[RetrievedChunk]) -> str:
+    parts = []
+    for i, c in enumerate(chunks):
+        status_label = c.status.upper()
+        level_label = f"L{c.hierarchy_level}"
+        section = f" / {c.section}" if c.section else ""
+        parts.append(
+            f"[Источник {i+1} | doc_id={c.document_id} | {status_label} | {level_label}{section}]\n"
+            f"{c.content}"
+        )
+    return "\n\n---\n\n".join(parts)
+
+
+async def _parse_llm_response(
+    raw: str,
+    chunks: list[RetrievedChunk],
+    db: AsyncSession,
+) -> tuple[str, list[FactItem], list[str], list[str], list[str]]:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            data = json.loads(match.group())
+        else:
+            return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
+
+    answer = data.get("answer", "")
+    hypotheses = data.get("hypotheses", [])
+    warnings = data.get("warnings", [])
+    requires = data.get("requires_verification", [])
+
+    # Строим map: document_id → chunk для обогащения ссылок
+    doc_map: dict[str, RetrievedChunk] = {c.document_id: c for c in chunks}
+
+    facts: list[FactItem] = []
+    for f in data.get("facts", []):
+        if not isinstance(f, dict) or not f.get("statement"):
+            continue
+        source_id = f.get("source_id", "")
+        chunk = doc_map.get(source_id)
+
+        if chunk:
+            doc_row = await get_document(db, source_id)
+            source = SourceRef(
+                document_id=source_id,  # type: ignore[arg-type]
+                title=doc_row.title if doc_row else source_id,
+                status=chunk.status,  # type: ignore[arg-type]
+                hierarchy_level=chunk.hierarchy_level,
+                section=chunk.section or None,
+                confluence_url=doc_row.confluence_url if doc_row else None,
+            )
+        else:
+            source = SourceRef(
+                document_id=source_id,  # type: ignore[arg-type]
+                title=source_id or "Неизвестный источник",
+                status="unknown",  # type: ignore[arg-type]
+                hierarchy_level=5,
+            )
+
+        facts.append(FactItem(statement=f["statement"], source=source))
+
+    return answer, facts, hypotheses, warnings, requires
 
 
 async def run(
     message: str,
     mode: ChatMode,
     file_content: str | None = None,
+    db: AsyncSession | None = None,
 ) -> dict:
-    # TODO: реализовать RAG pipeline + вызов skills
-    raise NotImplementedError("CorpusAgent.run не реализован")
+    # Поиск релевантных чанков
+    include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
+    chunks = await retrieve(message, top_k=10, include_archive=include_archive)
+
+    # Если загружен файл — добавляем его текст к запросу
+    extra_context = ""
+    if file_content:
+        extra_context = f"\n\n[ЗАГРУЖЕННЫЙ ДОКУМЕНТ ДЛЯ АНАЛИЗА]\n{file_content[:4000]}"
+
+    context = _build_context(chunks)
+    mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
+
+    user_message = (
+        f"Режим: {mode.value}\n"
+        f"Инструкция: {mode_instruction}\n\n"
+        f"КОРПУС ДОКУМЕНТОВ:\n{context}"
+        f"{extra_context}\n\n"
+        f"ВОПРОС: {message}"
+    )
+
+    llm = get_llm()
+    response = await llm.messages.create(
+        model=settings.LLM_MODEL,
+        max_tokens=4096,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    raw = response.content[0].text.strip()
+
+    answer, facts, hypotheses, warnings, requires = await _parse_llm_response(
+        raw, chunks, db
+    )
+
+    # Предупреждение если нет чанков
+    if not chunks:
+        warnings.append("⚠️ В корпусе не найдено релевантных документов по данному запросу")
+
+    # Предупреждение об archived чанках
+    archive_docs = {c.document_id for c in chunks if c.status == "archived"}
+    for doc_id in archive_docs:
+        warnings.append(f"⚠️ Использованы данные из архивного документа {doc_id}")
+
+    return {
+        "answer": answer,
+        "facts": facts,
+        "hypotheses": hypotheses,
+        "warnings": warnings,
+        "requires_verification": requires,
+        "chunks_used": len(chunks),
+        "agents_used": ["corpus"],
+    }

@@ -1,9 +1,19 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import chat, documents, contradictions, promises, drafts, corpus
+from app.api import chat, contradictions, corpus, documents, promises
+from app.storage.sql_db import init_db
 
-app = FastAPI(title="Хроника API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="Хроника API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,7 +27,6 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(contradictions.router, prefix="/api")
 app.include_router(promises.router, prefix="/api")
-app.include_router(drafts.router, prefix="/api")
 app.include_router(corpus.router, prefix="/api")
 
 

@@ -125,7 +125,32 @@ class StyleFeedback(Base):
     applied = Column(Boolean, default=False)
 
 
-async def init_db():
+def compute_hierarchy_level(
+    status: str,
+    is_anchor: bool,
+    doc_type: str | None,
+) -> int:
+    """L1–L6 по правилам из ТЗ."""
+    if is_anchor:
+        return 1
+    if status == "superseded":
+        return 7  # исключён из ответов
+    if status == "actual":
+        if doc_type == "strategy":
+            return 2
+        if doc_type in ("research", "plan"):
+            return 3
+        if doc_type == "operational":
+            return 4
+        return 3
+    if status in ("draft", "unknown"):
+        return 5
+    if status == "archived":
+        return 6
+    return 5
+
+
+async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -133,3 +158,129 @@ async def init_db():
 async def get_session() -> AsyncSession:
     async with AsyncSession(engine) as session:
         yield session
+
+
+# ── Document CRUD ────────────────────────────────────────────────────────────
+
+async def create_document(session: AsyncSession, data: dict) -> Document:
+    data["hierarchy_level"] = compute_hierarchy_level(
+        data.get("status", "unknown"),
+        data.get("is_anchor", False),
+        data.get("type"),
+    )
+    doc = Document(**data)
+    session.add(doc)
+    await session.commit()
+    await session.refresh(doc)
+    return doc
+
+
+async def get_document(session: AsyncSession, doc_id: str) -> Document | None:
+    from sqlalchemy import select
+    result = await session.execute(select(Document).where(Document.id == doc_id))
+    return result.scalar_one_or_none()
+
+
+async def list_documents(
+    session: AsyncSession,
+    status: str | None = None,
+    segment: str | None = None,
+) -> list[Document]:
+    from sqlalchemy import select
+    q = select(Document).where(Document.status != "superseded")
+    if status:
+        q = q.where(Document.status == status)
+    if segment:
+        q = q.where(Document.segment == segment)
+    q = q.order_by(Document.hierarchy_level, Document.created_at.desc())
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+async def update_document(session: AsyncSession, doc_id: str, patch: dict) -> Document | None:
+    doc = await get_document(session, doc_id)
+    if doc is None:
+        return None
+    for k, v in patch.items():
+        setattr(doc, k, v)
+    doc.hierarchy_level = compute_hierarchy_level(
+        doc.status, doc.is_anchor, doc.type
+    )
+    await session.commit()
+    await session.refresh(doc)
+    return doc
+
+
+async def save_chunks(session: AsyncSession, chunks: list[dict]) -> None:
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    if not chunks:
+        return
+    await session.execute(Chunk.__table__.insert(), chunks)
+    await session.commit()
+
+
+# ── Entity CRUD ──────────────────────────────────────────────────────────────
+
+async def save_entities(session: AsyncSession, entities: list[dict]) -> None:
+    if not entities:
+        return
+    await session.execute(Entity.__table__.insert(), entities)
+    await session.commit()
+
+
+async def get_entities_for_metric(
+    session: AsyncSession,
+    metric_name: str,
+    doc_id: str | None = None,
+) -> list[Entity]:
+    from sqlalchemy import select, or_
+    q = select(Entity).where(
+        Entity.type == "metric",
+        Entity.normalized_name == metric_name,
+    )
+    if doc_id:
+        q = q.where(Entity.document_id != doc_id)
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+# ── Contradiction CRUD ────────────────────────────────────────────────────────
+
+async def save_contradiction(session: AsyncSession, data: dict) -> Contradiction:
+    c = Contradiction(**data)
+    session.add(c)
+    await session.commit()
+    return c
+
+
+async def list_contradictions(
+    session: AsyncSession, status: str | None = None
+) -> list[Contradiction]:
+    from sqlalchemy import select
+    q = select(Contradiction)
+    if status:
+        q = q.where(Contradiction.status == status)
+    q = q.order_by(Contradiction.created_at.desc())
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
+# ── Promise CRUD ──────────────────────────────────────────────────────────────
+
+async def save_promises(session: AsyncSession, promises: list[dict]) -> None:
+    if not promises:
+        return
+    await session.execute(Promise.__table__.insert(), promises)
+    await session.commit()
+
+
+async def list_promises(
+    session: AsyncSession, status: str | None = None
+) -> list[Promise]:
+    from sqlalchemy import select
+    q = select(Promise)
+    if status:
+        q = q.where(Promise.status == status)
+    q = q.order_by(Promise.deadline.asc().nullslast())
+    result = await session.execute(q)
+    return list(result.scalars().all())
