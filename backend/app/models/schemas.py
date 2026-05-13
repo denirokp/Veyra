@@ -32,6 +32,7 @@ class ChatMode(str, Enum):
     write = "write"
     validate = "validate"
     research = "research"
+    full = "full"
 
 
 class PromiseStatus(str, Enum):

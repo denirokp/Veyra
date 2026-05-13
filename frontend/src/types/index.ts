@@ -1,5 +1,5 @@
 export type DocumentStatus = 'actual' | 'draft' | 'archived' | 'superseded' | 'unknown'
-export type ChatMode = 'search' | 'contradictions' | 'promises' | 'gaps' | 'write' | 'validate' | 'research'
+export type ChatMode = 'search' | 'contradictions' | 'promises' | 'gaps' | 'write' | 'validate' | 'research' | 'full'
 
 export interface SourceRef {
   document_id: string

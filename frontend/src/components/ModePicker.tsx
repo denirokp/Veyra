@@ -10,6 +10,7 @@ interface ModeOption {
 
 const MODES: ModeOption[] = [
   { value: null, label: 'Авто', hint: 'Режим определит модель сама по запросу' },
+  { value: 'full', label: 'Полный разбор', hint: 'Все срезы сразу: факты, расхождения, серые зоны, рынок, гипотезы' },
   { value: 'search', label: 'Поиск', hint: 'Ответ по документам со ссылками на источники' },
   { value: 'contradictions', label: 'Расхождения', hint: 'Численные и смысловые расхождения между документами' },
   { value: 'promises', label: 'Обещания', hint: 'Планы, дедлайны, что обещали и сделали' },
