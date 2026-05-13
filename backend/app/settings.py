@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     # LLM — OpenAI-совместимый протокол (работает с Kimi/Moonshot, OpenAI, Avito proxy и др.)
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.moonshot.ai/v1"
-    LLM_MODEL: str = "kimi-k2.6"
+    LLM_MODEL: str = "moonshot-v1-128k"
 
     # Embeddings — локальная sentence-transformers модель (без интернета).
     # Первый запуск скачивает ~500МБ в ~/.cache/huggingface.
