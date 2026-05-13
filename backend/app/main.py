@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.settings import settings
+    if not settings.LLM_API_KEY:
+        raise RuntimeError(
+            "LLM_API_KEY не задан в backend/.env — задай рабочий ключ перед стартом."
+        )
     await init_db()
     # Прогреваем embedding-модель на main thread — иначе первая загрузка
     # может прилететь из background_task worker'а и сломаться на meta tensor.

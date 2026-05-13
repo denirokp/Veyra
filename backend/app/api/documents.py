@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -26,6 +25,21 @@ router = APIRouter(tags=["documents"])
 
 DOCS_DIR = Path(settings.DOCS_DIR)
 DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Лимит размера загружаемого файла (100 МБ). Не пускаем больше — экономим память
+# при embedding и защищаемся от ситуации «случайный 10ГБ-файл уронил процесс».
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+
+# Белый список MIME — UploadFile.content_type может быть подделан клиентом,
+# но мы всё равно фильтруем явный мусор. Главная защита — суффикс файла
+# в SUPPORTED_EXTENSIONS + сам парсер, который кинет ValueError на не-документ.
+_ALLOWED_MIME_PREFIXES = (
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",  # старый .doc — мы не парсим, но не отбрасываем хедер
+    "application/octet-stream",  # старые браузеры так маркируют .docx/.md/.txt
+    "text/",
+)
 
 
 def _to_out(doc) -> DocumentOut:
@@ -59,18 +73,39 @@ async def upload_document(
     confluence_url: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_session),
 ):
-    suffix = Path(file.filename or "").suffix.lower()
+    # Имя файла используем только для extension и title — path-traversal
+    # невозможен, потому что target пишем как DOCS_DIR / f"{uuid}{suffix}".
+    raw_name = file.filename or ""
+    suffix = Path(raw_name).suffix.lower()
     if suffix not in SUPPORTED_EXTENSIONS:
         raise HTTPException(400, f"Неподдерживаемый формат: {suffix}")
+
+    ctype = (file.content_type or "").lower()
+    if ctype and not any(ctype.startswith(p) for p in _ALLOWED_MIME_PREFIXES):
+        raise HTTPException(415, f"Неподдерживаемый MIME-тип: {ctype}")
 
     doc_id = str(uuid.uuid4())
     file_path = DOCS_DIR / f"{doc_id}{suffix}"
 
-    # Сохраняем файл
+    # Стримим в файл с проверкой кумулятивного размера — иначе
+    # shutil.copyfileobj принесёт хоть гигабайт.
+    bytes_written = 0
     with file_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+        while True:
+            chunk = await file.read(1024 * 1024)  # 1 МБ за раз
+            if not chunk:
+                break
+            bytes_written += len(chunk)
+            if bytes_written > MAX_UPLOAD_BYTES:
+                f.close()
+                file_path.unlink(missing_ok=True)
+                raise HTTPException(
+                    413,
+                    f"Файл больше лимита {MAX_UPLOAD_BYTES // (1024 * 1024)} МБ",
+                )
+            f.write(chunk)
 
-    doc_title = title or Path(file.filename or "").stem
+    doc_title = title or Path(raw_name).stem or "Без названия"
 
     doc = await create_document(
         db,
