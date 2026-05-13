@@ -150,10 +150,25 @@ async def _parse_llm_response(
             logger.warning("docs_agent: невалидный JSON | head=%r", raw[:200])
             return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
 
+    def _as_str_list(raw):
+        # LLM иногда возвращает элементы как dict {statement, source_id} —
+        # схема ждёт строки, приводим вручную.
+        out = []
+        for w in raw or []:
+            if not w:
+                continue
+            if isinstance(w, str):
+                out.append(w)
+            elif isinstance(w, dict):
+                out.append(w.get("statement") or w.get("text") or str(w))
+            else:
+                out.append(str(w))
+        return out
+
     answer = data.get("answer", "")
-    hypotheses = data.get("hypotheses", [])
-    warnings = data.get("warnings", [])
-    requires = data.get("requires_verification", [])
+    hypotheses = _as_str_list(data.get("hypotheses"))
+    warnings = _as_str_list(data.get("warnings"))
+    requires = _as_str_list(data.get("requires_verification"))
 
     # Индексный map: номер источника (1-based) → chunk
     index_map: dict[int, RetrievedChunk] = {i + 1: c for i, c in enumerate(chunks)}
