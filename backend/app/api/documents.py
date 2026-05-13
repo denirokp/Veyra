@@ -249,6 +249,42 @@ async def reindex_doc(
     return _to_out(doc)
 
 
+@router.post("/documents/{doc_id}/brief", response_model=DocumentOut)
+async def regenerate_brief(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_session),
+):
+    """Сгенерировать (или пересоздать) document-level бриф для существующего
+    документа. Полезно после правки промпта или для документов, загруженных
+    до того как brief был внедрён."""
+    from app.rag.indexer import parse_text as _parse_text
+    from app.skills.document_brief import generate_document_brief
+
+    doc = await get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Документ не найден")
+    if not doc.file_path or not Path(doc.file_path).exists():
+        raise HTTPException(409, "Файл документа недоступен на диске")
+
+    title = doc.title
+    file_path = Path(doc.file_path)
+
+    async def _backfill():
+        async with DbSession(engine) as bdb:
+            try:
+                text = _parse_text(file_path)
+                brief = await generate_document_brief(text, title)
+                if brief:
+                    await update_document(bdb, doc_id, {"brief": brief})
+            except Exception:
+                import logging as _l
+                _l.getLogger(__name__).exception("brief backfill failed for %s", doc_id)
+
+    background_tasks.add_task(_backfill)
+    return _to_out(doc)
+
+
 @router.delete("/documents/{doc_id}")
 async def delete_doc(doc_id: str, db: AsyncSession = Depends(get_session)):
     from app.storage import vector_db

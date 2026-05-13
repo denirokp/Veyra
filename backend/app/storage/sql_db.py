@@ -71,6 +71,10 @@ class Document(Base):
     file_hash = Column(String, index=True)
     chunk_count = Column(Integer)
     indexed_at = Column(DateTime, server_default=func.now())
+    # Структурированный обзор всего документа от LLM — суть, ключевые цифры,
+    # инициативы, владельцы, сроки, риски. Используется для document-level
+    # анализа (full mode), чтобы LLM видел картину дока целиком, а не куски.
+    brief = Column(Text)
 
     chunks = relationship("Chunk", back_populates="document")
 
@@ -242,23 +246,44 @@ async def get_document_by_hash(
     return result.scalar_one_or_none()
 
 
+async def get_all_document_briefs(
+    session: AsyncSession,
+    statuses: list[str] | None = None,
+    limit: int = 50,
+) -> list[tuple[Document, str]]:
+    """Возвращает (Document, brief) для всех документов с заполненным брифом.
+    statuses — фильтр по статусу (по умолчанию actual). Limit защищает контекст
+    от взрыва на больших корпусах."""
+    from sqlalchemy import select as _select
+    statuses = statuses or ["actual"]
+    q = (
+        _select(Document)
+        .where(Document.status.in_(statuses))
+        .where(Document.brief.isnot(None))
+        .where(Document.brief != "")
+        .limit(limit)
+    )
+    result = await session.execute(q)
+    docs = list(result.scalars().all())
+    return [(d, d.brief) for d in docs if d.brief]
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         # PRAGMA foreign_keys=ON в SQLite по умолчанию ВЫКЛЮЧЕНО — без этого
         # FK-constraints не enforced. Включаем для каждой сессии в get_session.
         await conn.run_sync(Base.metadata.create_all)
-        # Лёгкая миграция: добавляем file_hash для существующих БД (SQLite
-        # `create_all` не апгрейдит схему — добавляем колонку вручную).
-        try:
-            await conn.exec_driver_sql(
-                "ALTER TABLE documents ADD COLUMN file_hash VARCHAR"
-            )
-            await conn.exec_driver_sql(
-                "CREATE INDEX IF NOT EXISTS ix_documents_file_hash ON documents(file_hash)"
-            )
-        except Exception:
-            # Колонка уже есть — норма
-            pass
+        # Лёгкие миграции: SQLite `create_all` не апгрейдит существующие
+        # таблицы — добавляем новые колонки вручную, idempotent.
+        for stmt in (
+            "ALTER TABLE documents ADD COLUMN file_hash VARCHAR",
+            "CREATE INDEX IF NOT EXISTS ix_documents_file_hash ON documents(file_hash)",
+            "ALTER TABLE documents ADD COLUMN brief TEXT",
+        ):
+            try:
+                await conn.exec_driver_sql(stmt)
+            except Exception:
+                pass  # уже применено
 
 
 async def get_session() -> AsyncSession:

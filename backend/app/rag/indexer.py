@@ -158,11 +158,11 @@ async def index_document(
 
     # Skills pipeline — изолируем каждый skill, чтобы падение одного не
     # уносило за собой обновление chunk_count и другие skills.
-    import logging as _logging
-    _log = _logging.getLogger(__name__)
     from app.skills.extract_entities import extract_and_save
     from app.skills.track_promises import extract_and_save_promises
     from app.skills.find_logic_signals import find_logic_signals_for_document
+    from app.skills.document_brief import generate_document_brief
+    from app.storage.sql_db import update_document as _update_document
 
     for skill_name, coro in (
         ("extract_entities", extract_and_save(text, document_id, document_metadata, db)),
@@ -173,6 +173,20 @@ async def index_document(
             await coro
         except Exception as exc:
             _log.exception("skill %s failed for doc=%s: %s", skill_name, document_id, exc)
+
+    # Document-level бриф — один LLM-вызов на весь текст, сохраняем в Document.brief.
+    # Это ключ к document-level анализу: full-mode подаёт LLM брифы всех документов,
+    # чтобы он видел картину целиком, а не только retrieve-чанки.
+    _tb = _time.monotonic()
+    try:
+        title = document_metadata.get("title") or "Документ"
+        brief = await generate_document_brief(text, title)
+        if brief:
+            await _update_document(db, document_id, {"brief": brief})
+            _log.info("index doc=%s brief %.2fs, %d chars",
+                      document_id, _time.monotonic() - _tb, len(brief))
+    except Exception as exc:
+        _log.exception("brief generation failed for doc=%s: %s", document_id, exc)
 
     return len(chunks)
 
