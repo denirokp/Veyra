@@ -623,10 +623,25 @@ async def run(
         raw, chunks, db
     )
 
+    agents = ["docs"]
+
+    # Видимый план — prepend к answer как blockquote, чтобы UX был похож на
+    # «агент работает», а не «ждите 60 сек». Только для full mode где это
+    # имеет смысл.
+    if mode == ChatMode.full and answer:
+        try:
+            from app.skills.plan_announcer import announce_plan
+            doc_titles = sorted({(c.title or c.document_id[:8]) for c in chunks})
+            plan_text = await announce_plan(message, doc_titles)
+            if plan_text:
+                answer = f"> 🔬 {plan_text}\n\n{answer}"
+                agents.append("plan_announcer")
+        except Exception as exc:
+            logger.warning("plan_announcer error (skipping): %s", exc)
+
     # Self-correction только для full mode и только когда критика реально
     # серьёзная. Регенерация — последний шанс улучшить ответ, если станет
     # хуже — откатываем.
-    agents = ["docs"]
     _NIL_UUID = "00000000-0000-0000-0000-000000000000"
 
     def _valid_facts_count(fact_list) -> int:
