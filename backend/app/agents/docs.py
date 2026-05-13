@@ -64,6 +64,15 @@ source_id используется ТОЛЬКО внутри объектов fa
 номера источников вида "[Источник 5]", "Source 7", "(см. 3)" и т.п. — пиши \
 название документа или раздел словами, если нужно атрибутировать.
 
+КРИТИЧЕСКОЕ ПРАВИЛО АТРИБУЦИИ: для каждого факта source_id ДОЛЖЕН указывать \
+на фрагмент, в заголовке которого стоит ТО ЖЕ название документа, из которого \
+факт. Никогда не ставь source_id фрагмента из документа A для факта который \
+взят из документа B. Перед тем как поставить source_id, проверь: \
+- факт взят из ПОЛНОГО ТЕКСТА или ОБЗОРА документа X? \
+- найди в ФРАГМЕНТАХ один с заголовком [Источник N | X | ...]. \
+- именно его N ставь в source_id. \
+Если в ФРАГМЕНТАХ нет ни одного с подходящим заголовком — не пиши этот факт.
+
 ПРАВИЛА СРАВНЕНИЯ МЕТРИК (важно):
 - Помечай как "расхождение" в warnings ТОЛЬКО если одна и та же метрика \
 (совпадают имя ИЛИ нормализованное имя), один и тот же период, одна и та же \
@@ -184,17 +193,29 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
 
 
 def _build_context(chunks: list[RetrievedChunk]) -> str:
+    # Сортируем чанки так чтобы фрагменты ОДНОГО документа шли подряд.
+    # Без этого LLM может перепутать source_id между документами (фрагменты
+    # от B2C идут вперемешку с Education по score), и факты получают
+    # неправильную атрибуцию. С группировкой LLM видит "1-15 = doc A,
+    # 16-N = doc B" и берёт нужный source_id.
+    grouped = sorted(chunks, key=lambda c: (c.document_id or "", c.metadata.get("chunk_index", 0) or 0))
     parts = []
-    for i, c in enumerate(chunks):
+    current_doc = None
+    for i, c in enumerate(grouped):
         status_label = c.status.upper()
         level_label = f"L{c.hierarchy_level}"
         title = c.title or c.document_id[:8]
         section = f" / {c.section}" if c.section else ""
+        # Видимый разделитель когда меняется документ — помогает LLM не путать
+        if c.document_id != current_doc and i > 0:
+            parts.append(f"\n### ↓ Следующий документ ↓\n")
+        current_doc = c.document_id
         parts.append(
             f"[Источник {i+1} | {title}{section} | {status_label} | {level_label}]\n"
             f"{c.content}"
         )
-    return "\n\n---\n\n".join(parts)
+    # Возвращаем grouped order — index_map в caller'е соответствует именно ему
+    return "\n\n---\n\n".join(parts), grouped
 
 
 def _build_entity_memory_block(entities: list, contradictions: list) -> str:
@@ -425,7 +446,7 @@ async def run(
                 from app.skills.deep_research import run_deep_research
                 logger.info("full-mode: switching to deep_research (%d docs, %d brief chars)",
                             len(briefs), briefs_total)
-                context_chunks = _build_context(chunks)
+                context_chunks, _ = _build_context(chunks)
                 deep_result = await run_deep_research(
                     query=message,
                     db=db,
@@ -498,7 +519,7 @@ async def run(
     if file_content:
         extra_context = f"\n\n[ЗАГРУЖЕННЫЙ ДОКУМЕНТ ДЛЯ АНАЛИЗА]\n{file_content[:4000]}"
 
-    context = _build_context(chunks)
+    context, chunks = _build_context(chunks)
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
 
     if full_texts_block:
