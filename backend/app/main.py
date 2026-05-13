@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Прогреваем embedding-модель на main thread — иначе первая загрузка
+    # может прилететь из background_task worker'а и сломаться на meta tensor.
+    from app.clients import get_embedder
+    get_embedder()
     async with AsyncSession(engine) as session:
         n = await mark_overdue_promises(session)
         if n:
