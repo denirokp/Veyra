@@ -103,7 +103,7 @@ class ChatResponse(BaseModel):
 class DocumentOut(BaseModel):
     id: UUID
     title: str
-    type: DocumentType
+    type: Optional[DocumentType] = None
     status: DocumentStatus
     hierarchy_level: int
     segment: Optional[str] = None
