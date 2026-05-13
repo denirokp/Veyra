@@ -128,35 +128,45 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
         "В hypotheses — рыночный контекст и аналоги."
     ),
     ChatMode.research: (
-        "Это режим РЫНОЧНОГО ИССЛЕДОВАНИЯ. Главное — внешний контекст, "
-        "конкуренты, тренды, индустриальные benchmarks.\n\n"
-        "❗ ОТВЕТ ДОЛЖЕН БЫТЬ MARKDOWN-ОТЧЁТОМ 400-800 СЛОВ С H2-СЕКЦИЯМИ "
-        "НИЖЕ. Короткий ответ в одном абзаце НЕ принимается.\n\n"
-        "ИСТОЧНИКИ (в порядке приоритета):\n"
-        "1. WEB-ИСТОЧНИКИ блок (если есть) — ОБЯЗАТЕЛЬНО используй каждый. "
-        "Каждый web-результат должен попасть как минимум в одну hypothesis с "
-        "конкретной цитатой и URL'ом в формате (https://...). НЕ игнорируй "
-        "web-результаты — они подгружены специально под этот запрос.\n"
-        "2. ТВОИ ЗНАНИЯ из pretrain — дополняй где web-блок не покрыл.\n"
-        "3. Документы команды — для привязки «как наши данные соотносятся "
-        "с рынком».\n\n"
-        "СТРУКТУРА answer (markdown, 400-800 слов):\n"
-        "## Резюме\nКоротко: суть исследуемой темы и 2-3 главных вывода.\n\n"
-        "## Что делают другие\nКонкретные продукты/компании из web-результатов. "
-        "Подзаголовок H3 на каждого: «Amazon Seller University», «Ozon "
-        "University», «Pendo», «Mixpanel» и т.п. В каждом блоке: что делают, "
-        "какие метрики, ссылка на источник.\n\n"
-        "## Индустриальные бенчмарки\nКонкретные цифры из источников или твоих "
-        "знаний (с disclaimer): «typical SaaS onboarding completion 20%», "
-        "«60-70% churn first 30 days по Mixpanel» и т.п.\n\n"
-        "## Применимость к Avito\nКак наши данные соотносятся, что можно "
-        "адаптировать.\n\n"
-        "ОСТАЛЬНЫЕ ПОЛЯ:\n"
-        "- facts: цитаты из ВНУТРЕННИХ документов с source_id (если есть)\n"
-        "- hypotheses: КАЖДЫЙ web-источник = 1 пункт. Начинай с названия "
-        "продукта/компании жирным, потом суть, потом URL в скобках. Пример: "
-        "«**Pendo**: контекстные tooltips в продукте дают +30% activation "
-        "(https://pendo.io/...)».\n"
+        "Это режим РЫНОЧНОГО ИССЛЕДОВАНИЯ — сравнительный разбор внешних "
+        "практик с привязкой к нашей задаче.\n\n"
+        "❗ ЖЁСТКИЕ ТРЕБОВАНИЯ:\n"
+        "1. ОТВЕТ = MARKDOWN-ОТЧЁТ 600-1200 СЛОВ. Одноабзацный summary НЕ "
+        "принимается.\n"
+        "2. КАЖДУЮ компанию/продукт из ВНЕШНЕГО КОНТЕКСТА ИЗ ИНТЕРНЕТА — "
+        "разбери ОТДЕЛЬНОЙ H3 секцией с КОНКРЕТНЫМИ числами/механиками из "
+        "web-результатов (стимулы, метрики, сроки, барьеры входа). НЕ пиши "
+        "общими фразами — копируй конкретику.\n"
+        "3. Inline-ссылки: после каждого факта из web в скобках имя сайта "
+        "или короткий URL — например (sell.amazon.com), (pro.wildberries.ru).\n"
+        "4. Заверши секцией с практическими паттернами для нашей задачи.\n\n"
+        "СТРУКТУРА answer (используй ЭТИ заголовки):\n\n"
+        "## Резюме\n3-4 предложения: что сравнивали, главные находки, "
+        "ключевой инсайт.\n\n"
+        "## [Компания 1]\nДля каждой найденной в web-блоке компании — "
+        "отдельная H2 секция (Ozon / Wildberries / Amazon / Shopify / etc). "
+        "В каждой:\n"
+        "- механика онбординга / обучения / стимулов (с конкретикой)\n"
+        "- конкретные цифры (барьеры входа, штрафные баллы, dur периодов, "
+        "проценты completion, бонусы, размер инвестиций — что есть в web)\n"
+        "- уникальные практики которых нет у других\n"
+        "- inline-ссылки на источник\n\n"
+        "## [Компания 2]\n...то же самое\n\n"
+        "## [Компания 3]\n...то же самое\n\n"
+        "## Что отсюда стоит забрать\n"
+        "3-6 КОНКРЕТНЫХ паттернов которые можно адаптировать. Каждый пункт:\n"
+        "- название механики (выделено **жирным**)\n"
+        "- как работает у конкурентов с цифрой эффекта\n"
+        "- как переложить на наш контекст (если есть данные из документов "
+        "Avito — упомяни их с привязкой)\n\n"
+        "ОСТАЛЬНЫЕ ПОЛЯ JSON:\n"
+        "- facts: цитаты из ВНУТРЕННИХ документов с source_id (если в "
+        "корпусе есть релевантное; если нет — пустой массив)\n"
+        "- hypotheses: КАЖДЫЙ web-источник = МИНИМУМ 1 пункт. Начинай с "
+        "названия продукта/компании жирным, потом конкретный факт с цифрой "
+        "и URL в скобках. Пример: «**Amazon Perfect Launch**: селлеры "
+        "которые проходят полный 90-дневный playbook генерируют выручку "
+        "в первый год в 6,3 раза больше среднего (sell.amazon.com)».\n"
         "- requires_verification: что подтвердить локальными данными\n\n"
         "НЕ лей воды. Конкретные имена, цифры, цитаты. Каждый web-результат "
         "должен быть использован."
@@ -614,18 +624,24 @@ async def run(
     # Web search — для full mode если запрос требует «внешнего опыта» И
     # Web search — для full / research режимов когда запрос требует
     # «внешнего опыта» И настроен один из API-ключей (Tavily/Brave).
-    # research — это буквально режим про внешний контекст, ему web-поиск нужен.
+    # research → multi-query (3-5 целевых поисков по компаниям/концептам).
+    # full → single-query (контекста из документов и так много).
     web_section = ""
     if mode in (ChatMode.full, ChatMode.research):
         try:
-            from app.skills.web_research import should_do_web_search, do_research
-            # research mode не требует триггерных слов — он сам по себе про внешнее
-            wants_web = (mode == ChatMode.research) or should_do_web_search(message)
-            if wants_web:
+            from app.skills.web_research import (
+                should_do_web_search, do_research, do_research_multi,
+            )
+            if mode == ChatMode.research:
+                # research всегда вызывает web-поиск + multi-query для глубины
+                web_block = await do_research_multi(message, max_results_per_query=10)
+            elif should_do_web_search(message):
                 web_block = await do_research(message, max_results=5)
-                if web_block:
-                    web_section = "\n\n" + web_block + "\n"
-                    logger.info("web_research: injected %d chars", len(web_block))
+            else:
+                web_block = ""
+            if web_block:
+                web_section = "\n\n" + web_block + "\n"
+                logger.info("web_research: injected %d chars", len(web_block))
         except Exception as exc:
             logger.warning("web_research error (skipping): %s", exc)
 
@@ -670,7 +686,7 @@ async def run(
     # full mode требует длинного markdown-отчёта (1500 слов ≈ 2K tokens) + 20 фактов
     # JSON (~2K tokens). 4096 не хватает — поднимаем до 8000 для full.
     # Full и Research возвращают длинный markdown + facts JSON — нужен запас.
-    max_tokens = 8000 if mode == ChatMode.full else (6000 if mode == ChatMode.research else 4096)
+    max_tokens = 8000 if mode in (ChatMode.full, ChatMode.research) else 4096
     try:
         raw = await call_llm(
             system=SYSTEM_PROMPT,
@@ -698,7 +714,7 @@ async def run(
     # Видимый план — prepend к answer как blockquote, чтобы UX был похож на
     # «агент работает», а не «ждите 60 сек». Только для full mode где это
     # имеет смысл.
-    if mode == ChatMode.full and answer:
+    if mode in (ChatMode.full, ChatMode.research) and answer:
         try:
             from app.skills.plan_announcer import announce_plan
             doc_titles = sorted({(c.title or c.document_id[:8]) for c in chunks})

@@ -4,6 +4,11 @@
 несколько результатов из web-поиска и инжектим в LLM-промпт как внешний
 контекст с disclaimer.
 
+Стратегия для research-режима — multi-query: LLM разбивает запрос на
+3-5 sub-queries (по компаниям / по концептам), для каждого делается
+независимый поиск, результаты дедуплицируются и подаются LLM скопом.
+Это даёт в 3-5 раз больше материала и заметно глубже синтез.
+
 Поддерживает два провайдера:
 - Tavily (платный, лучше качество для research): https://tavily.com
 - Brave Search (free tier 2000 запросов/мес): https://brave.com/search/api
@@ -128,10 +133,38 @@ async def search(query: str, max_results: int = 5) -> list[dict]:
 
 
 def format_for_prompt(results: list[dict], max_chars: int = 8000) -> str:
-    """Формирует блок «ВНЕШНИЙ КОНТЕКСТ» для подмешивания в промпт."""
+    """Формирует блок «ВНЕШНИЙ КОНТЕКСТ» для подмешивания в промпт.
+    Если у результата есть _sq (sub-query который его нашёл) — группируем."""
     if not results:
         return ""
-    parts = ["ВНЕШНИЙ КОНТЕКСТ ИЗ ИНТЕРНЕТА (используй как hypothesis с disclaimer):\n"]
+    parts = ["ВНЕШНИЙ КОНТЕКСТ ИЗ ИНТЕРНЕТА (используй конкретные цифры/имена/факты, "
+             "цитируй URL'ы в формате (https://...) при упоминании):\n"]
+    # Группировка по sub-query если есть
+    by_sq: dict[str, list[dict]] = {}
+    for r in results:
+        sq = r.get("_sq", "")
+        by_sq.setdefault(sq, []).append(r)
+    if len(by_sq) > 1:
+        # Multi-query — выводим секциями
+        total = 0
+        for sq, rs in by_sq.items():
+            section_header = f"\n→ По запросу: «{sq}»\n" if sq else "\n"
+            if total + len(section_header) > max_chars:
+                break
+            parts.append(section_header)
+            total += len(section_header)
+            for i, r in enumerate(rs, 1):
+                block = (
+                    f"  [{i}] {r.get('title', '')}\n"
+                    f"  URL: {r.get('url', '')}\n"
+                    f"  {r.get('content', '')[:1200]}\n"
+                )
+                if total + len(block) > max_chars:
+                    break
+                parts.append(block)
+                total += len(block)
+        return "\n".join(parts)
+    # Single-query fallback — старый формат
     total = 0
     for i, r in enumerate(results, 1):
         block = (
@@ -198,6 +231,114 @@ def _maybe_english_query(query: str) -> str | None:
         return None
     return en[:300]
 
+
+# ── Multi-query research ───────────────────────────────────────────────────
+
+
+_SEARCH_PLANNER_SYSTEM = """\
+Ты планировщик веб-поиска. На входе — запрос пользователя про \
+индустриальный опыт / конкурентов / best practices.
+
+Твоя задача: разбить запрос на 3-5 КОНКРЕТНЫХ поисковых запросов которые \
+дадут глубокий материал. Каждый запрос — про ОДНУ компанию или ОДИН \
+конкретный концепт.
+
+Хороший паттерн:
+- по каждой компании отдельный запрос со специфическим контекстом ("Wildberries \
+обучение продавцов портал PRO WB новички", "Amazon Seller University \
+onboarding verification")
+- по каждой ключевой механике отдельный запрос ("Amazon New Seller Incentives \
+first 90 days", "Ozon seller penalty points system")
+- mix русский + английский если тема международная
+
+Плохой паттерн:
+- один общий запрос со всеми компаниями скопом
+- слишком абстрактные слова ("best practices marketplace onboarding")
+
+Формат СТРОГО JSON:
+{"queries": ["запрос 1", "запрос 2", ...], "rationale": "одно предложение"}
+
+Без markdown, без объяснений. От 3 до 5 запросов.\
+"""
+
+
+async def plan_search_queries(user_query: str, max_queries: int = 5) -> list[str]:
+    """LLM разбивает запрос на несколько целевых search queries."""
+    try:
+        from app.clients import call_llm
+        raw = await call_llm(
+            system=_SEARCH_PLANNER_SYSTEM,
+            messages=[{"role": "user", "content": user_query}],
+            max_tokens=500,
+        )
+    except Exception as exc:
+        logger.warning("plan_search_queries failed: %s", exc)
+        return []
+
+    parsed = None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        if m:
+            try:
+                parsed = json.loads(m.group())
+            except json.JSONDecodeError:
+                pass
+    if not isinstance(parsed, dict):
+        return []
+    queries = parsed.get("queries", []) or []
+    if not isinstance(queries, list):
+        return []
+    cleaned = [str(q).strip() for q in queries if str(q).strip()][:max_queries]
+    if cleaned:
+        logger.info("search-planner: %d queries — %s",
+                    len(cleaned), parsed.get("rationale", "")[:80])
+    return cleaned
+
+
+async def do_research_multi(user_query: str, max_results_per_query: int = 10) -> str:
+    """Plan → multi-search → merge.
+
+    Стратегия для research-режима: LLM генерит 3-5 sub-queries, каждый
+    отдельно ищется в Brave (с уважением к rate-limit 1 req/sec), все
+    результаты сливаются с dedup по URL.
+    """
+    if not (settings.TAVILY_API_KEY or settings.BRAVE_API_KEY):
+        return ""
+
+    sub_queries = await plan_search_queries(user_query)
+    if not sub_queries:
+        # Fallback на одиночный поиск
+        return await do_research(user_query, max_results=max_results_per_query)
+
+    all_results: list[dict] = []
+    seen_urls: set[str] = set()
+    first = True
+    for sq in sub_queries:
+        if not first:
+            await asyncio.sleep(1.1)  # Brave free tier rate-limit
+        first = False
+        try:
+            results = await search(sq, max_results=max_results_per_query)
+        except Exception as exc:
+            logger.warning("multi-search failed for %r: %s", sq[:50], exc)
+            continue
+        added = 0
+        for r in results:
+            if r.get("url") and r["url"] not in seen_urls:
+                seen_urls.add(r["url"])
+                all_results.append({**r, "_sq": sq})
+                added += 1
+        logger.info("multi-search [%r] → %d new (total %d)",
+                    sq[:50], added, len(all_results))
+
+    if not all_results:
+        return ""
+    return format_for_prompt(all_results, max_chars=18000)
+
+
+# ── Single-query fallback ──────────────────────────────────────────────────
 
 async def do_research(query: str, max_results: int = 10) -> str:
     """Полный пайплайн: query → результаты поиска → форматированный блок.
