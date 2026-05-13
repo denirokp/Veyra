@@ -118,14 +118,23 @@ async def index_document(
         ],
     )
 
-    # Skills pipeline (импортируем здесь чтобы избежать циклических импортов)
+    # Skills pipeline — изолируем каждый skill, чтобы падение одного не
+    # уносило за собой обновление chunk_count и другие skills.
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
     from app.skills.extract_entities import extract_and_save
     from app.skills.track_promises import extract_and_save_promises
     from app.skills.find_logic_signals import find_logic_signals_for_document
 
-    await extract_and_save(text, document_id, document_metadata, db)
-    await extract_and_save_promises(text, document_id, document_metadata, db)
-    await find_logic_signals_for_document(document_id, db)
+    for skill_name, coro in (
+        ("extract_entities", extract_and_save(text, document_id, document_metadata, db)),
+        ("track_promises", extract_and_save_promises(text, document_id, document_metadata, db)),
+        ("find_logic_signals", find_logic_signals_for_document(document_id, db)),
+    ):
+        try:
+            await coro
+        except Exception as exc:
+            _log.exception("skill %s failed for doc=%s: %s", skill_name, document_id, exc)
 
     return len(chunks)
 

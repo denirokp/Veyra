@@ -1,4 +1,8 @@
 """SQLite schema — v4.0: numeric_contradictions, logic_signals, updated entity types."""
+import logging
+import re
+from datetime import date as _date
+
 from sqlalchemy import (
     Boolean, Column, Date, DateTime, Float, ForeignKey,
     Integer, String, Text, func,
@@ -8,6 +12,37 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 from app.settings import settings
+
+_logger = logging.getLogger(__name__)
+
+
+def _coerce_date(value):
+    """LLM возвращает даты в произвольных формах: YYYY-MM-DD, YYYY-MM, YYYY,
+    "2023-2025", "five years" и т.п. Принимаем только однозначные;
+    остальное → None, чтобы не валить вставку в SQLite Date."""
+    if value is None or isinstance(value, _date):
+        return value
+    if not isinstance(value, str):
+        return None
+    v = value.strip()
+    if not v:
+        return None
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", v)
+    if m:
+        try:
+            return _date(int(m[1]), int(m[2]), int(m[3]))
+        except ValueError:
+            return None
+    m = re.fullmatch(r"(\d{4})-(\d{2})", v)
+    if m:
+        try:
+            return _date(int(m[1]), int(m[2]), 1)
+        except ValueError:
+            return None
+    m = re.fullmatch(r"(\d{4})", v)
+    if m:
+        return _date(int(m[1]), 1, 1)
+    return None
 
 engine = create_async_engine(settings.DATABASE_URL, echo=False)
 
@@ -244,6 +279,8 @@ async def save_chunks(session: AsyncSession, chunks: list[dict]) -> None:
 async def save_entities(session: AsyncSession, entities: list[dict]) -> None:
     if not entities:
         return
+    for e in entities:
+        e["date_context"] = _coerce_date(e.get("date_context"))
     await session.execute(Entity.__table__.insert(), entities)
     await session.commit()
 
@@ -395,6 +432,9 @@ async def get_open_logic_signals_for_docs(
 async def save_promises(session: AsyncSession, promises: list[dict]) -> None:
     if not promises:
         return
+    for p in promises:
+        for f in ("document_date", "deadline", "resolved_at"):
+            p[f] = _coerce_date(p.get(f))
     await session.execute(Promise.__table__.insert(), promises)
     await session.commit()
 
