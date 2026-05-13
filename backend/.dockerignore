@@ -1,0 +1,10 @@
+# Не тащим локальные данные в image — они в volumes
+.env
+data/
+*.db
+*.db-journal
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+tests/

@@ -1,0 +1,62 @@
+# Veyra/Хроника — корпоративная память Avito.
+# Поднимает backend (FastAPI + Chroma + SQLite) и frontend (Vite build на nginx).
+#
+# Запуск:
+#   1. cp backend/.env.example .env
+#   2. впиши LLM_API_KEY и (опционально) TAVILY_API_KEY / BRAVE_API_KEY
+#   3. docker compose up -d
+#   4. открыть http://localhost:8080
+#
+# Данные (Chroma, SQLite, файлы документов, HF-кэш модели эмбеддингов)
+# хранятся в именованных volume — переживают перезапуск контейнеров.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: veyra-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Перезаписываем пути под структуру volume.
+      DOCS_DIR: /app/data/docs
+      STYLE_ANCHORS_DIR: /app/data/style_anchors
+      CHROMA_PERSIST_DIR: /app/data/chroma
+      DATABASE_URL: sqlite+aiosqlite:////app/data/khronika.db
+      # В контейнере фронта nginx стоит на 80 → доступ через localhost:8080.
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+    volumes:
+      - veyra-data:/app/data
+      - veyra-hf-cache:/app/.hf_cache
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 120s  # embedding-модель грузится ~30-60 сек на первый старт
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: veyra-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 3s
+
+volumes:
+  # БД, Chroma, файлы документов
+  veyra-data:
+  # Кэш HuggingFace моделей — чтобы не качать sentence-transformers каждый раз
+  veyra-hf-cache:
