@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { getCorpusStats } from '../api/client'
-import clsx from 'clsx'
 
 interface TopBarProps {
   onCorpusOpen: () => void
   onClear: () => void
 }
+
+const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform)
 
 export function TopBar({ onCorpusOpen, onClear }: TopBarProps) {
   const { data: stats } = useQuery({
@@ -14,49 +15,123 @@ export function TopBar({ onCorpusOpen, onClear }: TopBarProps) {
     refetchInterval: 60_000,
   })
 
-  const hasAlerts = (stats?.open_contradictions ?? 0) + (stats?.open_logic_signals ?? 0) > 0
+  const modKey = isMac() ? '⌘' : 'Ctrl'
 
   return (
-    <header className="flex items-center justify-between px-5 py-2.5 border-b border-zinc-800 bg-zinc-900 shrink-0">
-      <div className="flex items-center gap-4">
-        <span className="text-sm font-bold text-zinc-100 tracking-wide">Хроника</span>
+    <header className="sticky top-0 z-10 bg-[#f6f7f9]/85 backdrop-blur border-b border-slate-200 shrink-0">
+      <div className="max-w-[1280px] mx-auto px-6 h-[52px] flex items-center justify-between gap-6">
 
-        {stats && (
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-zinc-500">{stats.total_documents} документов</span>
-
-            {stats.open_contradictions > 0 && (
-              <span className={clsx('px-1.5 py-0.5 rounded', hasAlerts ? 'bg-yellow-900/60 text-yellow-300' : 'text-zinc-600')}>
-                ⚡ {stats.open_contradictions}
-              </span>
-            )}
-
-            {stats.open_logic_signals > 0 && (
-              <span className="px-1.5 py-0.5 rounded bg-yellow-900/60 text-yellow-300">
-                🔍 {stats.open_logic_signals}
-              </span>
-            )}
-
-            {stats.open_promises > 0 && (
-              <span className="text-zinc-500">📋 {stats.open_promises}</span>
-            )}
+        {/* Left: brand + nav */}
+        <div className="flex items-center gap-5 min-w-0">
+          <div className="flex items-baseline gap-1.5 shrink-0">
+            <span className="text-[16px] font-semibold text-slate-900 tracking-tight">Хроника</span>
+            <span className="text-[10.5px] text-slate-400 font-mono">v2</span>
           </div>
-        )}
-      </div>
+          <nav className="hidden md:flex items-center gap-1 text-[13px] text-slate-500 shrink-0">
+            <span className="font-medium text-slate-900 px-1">Чат</span>
+            <span className="text-slate-300 mx-0.5">/</span>
+            <button
+              type="button"
+              onClick={onCorpusOpen}
+              className="hover:text-slate-900 rounded px-1 ring-focus transition-colors duration-120"
+            >
+              Корпус
+            </button>
+            <span className="text-slate-300 mx-0.5">/</span>
+            <button
+              type="button"
+              className="hover:text-slate-900 rounded px-1 ring-focus transition-colors duration-120"
+            >
+              Обещания
+            </button>
+          </nav>
+        </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onCorpusOpen}
-          className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors border border-zinc-700"
-        >
-          📂 Корпус
-        </button>
-        <button
-          onClick={onClear}
-          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1.5"
-        >
-          Очистить
-        </button>
+        {/* Right: stats + actions */}
+        <div className="flex items-center gap-4 shrink-0">
+          {stats && (
+            <div className="hidden lg:flex items-center gap-3 text-[12.5px] text-slate-600">
+              <div className="inline-flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" width={13} height={13} viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
+                  className="text-slate-400">
+                  <path d="M6 14l1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/>
+                </svg>
+                <span className="tabular-nums font-medium text-slate-700">{stats.total_documents}</span>
+                <span className="text-slate-500">в корпусе</span>
+              </div>
+
+              {stats.open_promises > 0 && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <div className="inline-flex items-center gap-1.5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width={13} height={13} viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
+                      className="text-amber-600">
+                      <rect x="8" y="2" width="8" height="4" rx="1"/>
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                      <path d="M12 11h4"/><path d="M12 16h4"/>
+                      <path d="M8 11h.01"/><path d="M8 16h.01"/>
+                    </svg>
+                    <span className="tabular-nums font-medium text-slate-700">{stats.open_promises}</span>
+                    <span className="text-slate-500">просрочено</span>
+                  </div>
+                </>
+              )}
+
+              {(stats.open_contradictions > 0 || stats.open_logic_signals > 0) && (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <div className="inline-flex items-center gap-1.5 text-amber-700">
+                    <span className="tabular-nums font-medium">
+                      ⚡ {stats.open_contradictions + stats.open_logic_signals}
+                    </span>
+                    <span className="text-slate-500 text-[12px]">сигналов</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Cmd+K button */}
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 text-[12.5px] text-slate-500 bg-white border border-slate-200 hover:border-slate-300 hover:text-slate-700 rounded-lg pl-2.5 pr-1.5 py-1.5 shadow-soft ring-focus transition-colors duration-120"
+            title={`Фокус на вводе (${modKey}K)`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width={13} height={13} viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span className="hidden md:inline">Спросить</span>
+            <kbd className="inline-flex items-center gap-0.5 text-[10px] font-mono text-slate-500">
+              <span>{modKey}</span><span>K</span>
+            </kbd>
+          </button>
+
+          {/* Corpus panel button */}
+          <button
+            type="button"
+            onClick={onCorpusOpen}
+            className="text-slate-500 hover:text-slate-900 ring-focus rounded p-1.5 transition-colors duration-120"
+            title="Корпус документов"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <line x1="15" y1="3" x2="15" y2="21"/>
+            </svg>
+          </button>
+
+          {/* Clear button */}
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[12.5px] text-slate-500 hover:text-slate-700 ring-focus rounded px-1 transition-colors duration-120"
+          >
+            Очистить
+          </button>
+        </div>
       </div>
     </header>
   )

@@ -11,7 +11,7 @@ function Inner() {
   const { clear } = useChatStore()
 
   return (
-    <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 font-sans">
+    <div className="flex flex-col h-screen bg-[#f6f7f9] text-slate-900 font-sans">
       <TopBar
         onCorpusOpen={() => setCorpusOpen(true)}
         onClear={clear}

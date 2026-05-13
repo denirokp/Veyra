@@ -2,23 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 * {
   box-sizing: border-box;
 }
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+html, body {
+  background: #f6f7f9;
 }
 
+body {
+  margin: 0;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
+}
+
+kbd {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* Focus rings */
+*:focus { outline: none; }
+.ring-focus:focus-visible {
+  box-shadow: 0 0 0 2px #475569, 0 0 0 3px #fff;
+}
+
+/* Skeleton pulse */
+@keyframes skel { 0%,100% { opacity:.55 } 50% { opacity:.9 } }
+.skel { animation: skel 1.5s ease-in-out infinite; }
+
 /* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 3px;
-}
+.nice-scroll::-webkit-scrollbar { width: 10px; }
+.nice-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 8px; border: 2px solid #f8fafc; }
+.nice-scroll::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+/* Narrow scrollbar for sidebar/aux elements */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+/* Selection */
+::selection { background: #e2e8f0; color: #0f172a; }
+
+/* Text wrapping */
+.text-pretty { text-wrap: pretty; }
+.text-balance { text-wrap: balance; }

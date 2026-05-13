@@ -6,6 +6,7 @@ import type {
   CorpusStats,
   LogicSignal,
   InitiativeReviewResult,
+  QuickReviewResult,
   MissingMetric,
 } from '../types'
 
@@ -95,13 +96,6 @@ export async function reviewInitiative(
 ): Promise<InitiativeReviewResult> {
   const { data } = await api.post<InitiativeReviewResult>('/initiative-review', { title, text })
   return data
-}
-
-export interface QuickReviewResult {
-  verdict: 'approve' | 'needs_work' | 'reject'
-  summary: string
-  conflicts: string[]
-  gaps: string[]
 }
 
 export async function reviewInitiativeQuick(

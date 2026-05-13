@@ -37,13 +37,21 @@ export interface ChatRequest {
   session_id?: string
 }
 
+export interface QuickReviewResult {
+  verdict: 'approve' | 'needs_work' | 'reject'
+  summary: string
+  conflicts: string[]
+  gaps: string[]
+  metadata?: { chunks_used: number; mode: string }
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   response?: ChatResponse
   uploadedDoc?: Document
-  uploadReview?: InitiativeReviewResult
+  uploadReview?: QuickReviewResult
   timestamp: Date
 }
 

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import { sendChat, uploadDocument, reviewInitiativeQuick } from '../api/client'
 import { queryClient } from '../queryClient'
-import type { Message, ChatMode, ChatResponse, Document } from '../types'
+import type { Message, ChatMode, ChatResponse, Document, QuickReviewResult } from '../types'
 
 interface ChatState {
   messages: Message[]
@@ -112,7 +112,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       // 3. Быстрый initiative review (без ожидания индексации — используем сырой текст)
-      let review = null
+      let review: QuickReviewResult | null = null
       try {
         review = await reviewInitiativeQuick(doc.title, fileText || `Документ: ${doc.title}`)
       } catch {
