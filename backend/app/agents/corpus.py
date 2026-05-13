@@ -16,6 +16,7 @@ from app.settings import settings
 from app.storage.sql_db import (
     get_document,
     get_open_contradictions_for_docs,
+    list_contradictions,
     search_entities_by_query,
 )
 
@@ -239,6 +240,19 @@ async def run(
         contradictions_in_scope = await get_open_contradictions_for_docs(db, doc_ids)
         entity_block = _build_entity_memory_block(entities, contradictions_in_scope)
 
+    # Task 3.5: для contradictions режима — дополняем все открытые расхождения из БД
+    stored_contradictions_block = ""
+    if mode == ChatMode.contradictions and db is not None:
+        all_open = await list_contradictions(db, status="open")
+        if all_open:
+            lines = ["[ЗАФИКСИРОВАННЫЕ ЧИСЛОВЫЕ РАСХОЖДЕНИЯ ИЗ ПАМЯТИ СИСТЕМЫ]"]
+            for c in all_open[:10]:
+                lines.append(
+                    f"  • {c.metric}: {c.value_a} vs {c.value_b}"
+                    + (f" (период: {c.period})" if c.period else "")
+                )
+            stored_contradictions_block = "\n".join(lines)
+
     extra_context = ""
     extra_warnings: list[str] = []
     if file_content:
@@ -255,6 +269,7 @@ async def run(
         f"Инструкция: {mode_instruction}\n\n"
         f"КОРПУС ДОКУМЕНТОВ:\n{context}"
         + (f"\n\n{entity_block}" if entity_block else "")
+        + (f"\n\n{stored_contradictions_block}" if stored_contradictions_block else "")
         + extra_context
         + f"\n\nВОПРОС: {message}"
     )

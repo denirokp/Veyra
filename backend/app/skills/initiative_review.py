@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -198,4 +199,68 @@ async def run_initiative_review(
             "contradictions_found": len(contradictions),
             "logic_signals_found": len(logic_signals),
         },
+    }
+
+
+_QUICK_SYSTEM_PROMPT = """\
+Ты аналитик. Дай быстрый предварительный разбор инициативы на основе корпуса документов.
+
+Верни JSON строго с этими ключами:
+{
+  "verdict": "approve|needs_work|reject",
+  "summary": "1-2 предложения: суть инициативы",
+  "conflicts": ["Что из корпуса расходится с инициативой (если есть)"],
+  "gaps": ["gap_type: описание — например 'owner: не указан владелец'"]
+}
+
+verdict: approve если нет явных блокеров; needs_work если есть gaps/conflicts; reject если противоречит стратегии.
+Только JSON, без markdown.\
+"""
+
+
+async def run_initiative_review_quick(
+    title: str,
+    text: str,
+    db: AsyncSession,
+) -> dict:
+    """Быстрый разбор инициативы: только вердикт + summary + gaps + conflicts.
+
+    Без Market Agent, без логических сигналов — 1 LLM-вызов, ~2-4 сек.
+    Используется при загрузке файла для быстрой карточки в чате.
+    """
+    from app.clients import get_llm
+
+    query = f"{title}\n{text[:300]}"
+    chunks = await retrieve(query, top_k=8, include_archive=False)
+
+    context_lines = [f"=== ИНИЦИАТИВА: {title} ===\n{text[:1500]}"]
+    if chunks:
+        context_lines.append("\n=== РЕЛЕВАНТНЫЕ ДОКУМЕНТЫ ===")
+        seen: set[str] = set()
+        for c in chunks[:5]:
+            doc_title = c.metadata.get("title", c.document_id[:8])
+            if doc_title not in seen:
+                seen.add(doc_title)
+                context_lines.append(f"— {doc_title}: {c.content[:400]}")
+
+    llm = get_llm()
+    response = await llm.messages.create(
+        model=settings.LLM_MODEL,
+        max_tokens=600,
+        system=_QUICK_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": "\n".join(context_lines)}],
+    )
+    raw = response.content[0].text.strip()
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        result = json.loads(match.group()) if match else {}
+
+    return {
+        "verdict": result.get("verdict", "needs_work"),
+        "summary": result.get("summary", ""),
+        "conflicts": result.get("conflicts", []),
+        "gaps": result.get("gaps", []),
+        "metadata": {"chunks_used": len(chunks), "mode": "quick"},
     }

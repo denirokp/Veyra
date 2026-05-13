@@ -97,6 +97,21 @@ export async function reviewInitiative(
   return data
 }
 
+export interface QuickReviewResult {
+  verdict: 'approve' | 'needs_work' | 'reject'
+  summary: string
+  conflicts: string[]
+  gaps: string[]
+}
+
+export async function reviewInitiativeQuick(
+  title: string,
+  text: string,
+): Promise<QuickReviewResult> {
+  const { data } = await api.post<QuickReviewResult>('/initiative-review/quick', { title, text })
+  return data
+}
+
 export async function suggestMetrics(
   title: string,
   text: string,

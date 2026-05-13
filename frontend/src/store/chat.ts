@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
-import { sendChat, uploadDocument, reviewInitiative } from '../api/client'
+import { sendChat, uploadDocument, reviewInitiativeQuick } from '../api/client'
 import { queryClient } from '../queryClient'
 import type { Message, ChatMode, ChatResponse, Document } from '../types'
 
@@ -111,12 +111,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         fileText = (await readFileText(file)).slice(0, 2000)
       }
 
-      // 3. Initiative Review с небольшой задержкой (даём бэкенду записать чанки)
-      await new Promise((r) => setTimeout(r, 2500))
-
+      // 3. Быстрый initiative review (без ожидания индексации — используем сырой текст)
       let review = null
       try {
-        review = await reviewInitiative(doc.title, fileText || `Документ: ${doc.title}`)
+        review = await reviewInitiativeQuick(doc.title, fileText || `Документ: ${doc.title}`)
       } catch {
         // review необязателен — продолжаем без него
       }

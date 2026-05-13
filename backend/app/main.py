@@ -1,13 +1,18 @@
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import chat, contradictions, corpus, documents, initiative, metrics, promises
 from app.storage.sql_db import init_db, mark_overdue_promises, AsyncSession, engine
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 _OVERDUE_INTERVAL_HOURS = 6
@@ -48,6 +53,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    t0 = time.monotonic()
+    response = await call_next(request)
+    ms = int((time.monotonic() - t0) * 1000)
+    logger.info("%s %s → %d (%dms)", request.method, request.url.path, response.status_code, ms)
+    return response
+
 
 app.include_router(chat.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
