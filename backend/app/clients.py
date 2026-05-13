@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from typing import Awaitable, Callable, TypeVar
 
 import openai
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 _llm_client: openai.AsyncOpenAI | None = None
 _embedder = None  # SentenceTransformer, lazy-loaded
+
+# Глобальный лимит одновременных LLM-вызовов. Moonshot не штатно отдаёт 429,
+# но без лимита find_logic_signals может пустить 5-10 параллельных запросов
+# за секунду и упереться в rate-limit или таймауты.
+_LLM_SEMAPHORE = asyncio.Semaphore(3)
 
 T = TypeVar("T")
 
@@ -52,7 +58,9 @@ async def _with_retry(
     base_delay: float = 1.0,
     label: str = "llm",
 ) -> T:
-    """Экспоненциальный backoff: 1s → 2s → 4s."""
+    """Экспоненциальный backoff с jitter: 1±0.5 → 2±1 → 4±2 сек.
+    Jitter нужен чтобы N параллельных запросов не ретраились синхронно после
+    общего сетевого глитча и не штормили API в один момент."""
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
         try:
@@ -62,7 +70,8 @@ async def _with_retry(
             if attempt == max_attempts - 1:
                 logger.error("%s retry exhausted (%d attempts): %s", label, max_attempts, exc)
                 break
-            delay = base_delay * (2 ** attempt)
+            base = base_delay * (2 ** attempt)
+            delay = base + random.uniform(0, base * 0.5)
             logger.warning("%s attempt %d/%d failed (%s), retry in %.1fs",
                            label, attempt + 1, max_attempts, exc, delay)
             await asyncio.sleep(delay)
@@ -100,14 +109,16 @@ async def call_llm(
     messages: list[dict],
     max_tokens: int,
 ) -> str:
-    """LLM-вызов через OpenAI-совместимый API. С ретраями. Возвращает текст ответа."""
+    """LLM-вызов через OpenAI-совместимый API. С ретраями и rate-limit.
+    Возвращает текст ответа."""
     async def _call() -> str:
-        client = get_llm_client()
-        response = await client.chat.completions.create(
-            model=settings.LLM_MODEL,
-            max_tokens=max_tokens,
-            messages=[{"role": "system", "content": system}, *messages],
-        )
+        async with _LLM_SEMAPHORE:
+            client = get_llm_client()
+            response = await client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                max_tokens=max_tokens,
+                messages=[{"role": "system", "content": system}, *messages],
+            )
         # reasoning-модели и редкие провайдер-ошибки иногда возвращают content=None
         return (response.choices[0].message.content or "").strip()
 

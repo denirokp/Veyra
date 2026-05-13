@@ -27,6 +27,19 @@ async function fileToBase64(file: File): Promise<string> {
   })
 }
 
+function humanizeError(err: any): string {
+  const status = err?.response?.status as number | undefined
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string' && detail) return detail
+  if (status === 413) return 'Файл слишком большой (>100 МБ)'
+  if (status === 415) return 'Неподдерживаемый тип файла'
+  if (status === 404) return 'Не найдено'
+  if (status && status >= 500) return `Сервер вернул ошибку ${status}. Проверь логи backend.`
+  if (err?.code === 'ECONNABORTED') return 'Запрос отменён по таймауту'
+  if (err?.message === 'Network Error') return 'Бэкенд недоступен — проверь uvicorn на :8000'
+  return err?.message || 'Неизвестная ошибка'
+}
+
 async function readFileText(file: File): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader()
@@ -78,7 +91,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const errorMsg: Message = {
         id: uuidv4(),
         role: 'assistant',
-        content: `Ошибка: ${err?.response?.data?.detail ?? err.message ?? 'Неизвестная ошибка'}`,
+        content: humanizeError(err),
         timestamp: new Date(),
       }
       set((s) => ({ messages: [...s.messages, errorMsg] }))
@@ -142,7 +155,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const errMsg: Message = {
         id: pendingId,
         role: 'system',
-        content: `Ошибка загрузки: ${err?.response?.data?.detail ?? err.message ?? 'Неизвестная ошибка'}`,
+        content: `Ошибка загрузки: ${humanizeError(err)}`,
         timestamp: new Date(),
       }
       set((s) => ({

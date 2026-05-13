@@ -381,13 +381,19 @@ async def get_open_contradictions_for_docs(
 
 
 async def mark_overdue_promises(session: AsyncSession) -> int:
-    """При старте помечает просроченные open-обещания как overdue."""
-    from sqlalchemy import select, update
+    """При старте помечает просроченные open-обещания как overdue.
+    Promise.deadline IS NULL в SQL вычисляется как UNKNOWN — без явного
+    isnot(None) такие обещания никогда не пометятся overdue."""
+    from sqlalchemy import update
     from datetime import date
     today = date.today()
     result = await session.execute(
         update(Promise)
-        .where(Promise.status == "open", Promise.deadline < today)
+        .where(
+            Promise.status == "open",
+            Promise.deadline.isnot(None),
+            Promise.deadline < today,
+        )
         .values(status="overdue")
         .returning(Promise.id)
     )
