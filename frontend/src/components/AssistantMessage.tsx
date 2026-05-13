@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { ChatResponse } from '../types'
 import { SourceBadge } from './SourceBadge'
 
@@ -6,17 +8,46 @@ interface Props {
   response?: ChatResponse
 }
 
+// Кастомизация рендера markdown под тёмную тему
+const md = {
+  h1: (p: any) => <h2 className="text-lg font-semibold text-zinc-100 mt-4 mb-2" {...p} />,
+  h2: (p: any) => <h3 className="text-base font-semibold text-zinc-100 mt-3 mb-2" {...p} />,
+  h3: (p: any) => <h4 className="text-sm font-semibold text-zinc-200 mt-2 mb-1" {...p} />,
+  h4: (p: any) => <h5 className="text-sm font-semibold text-zinc-300 mt-2 mb-1" {...p} />,
+  p:  (p: any) => <p className="text-zinc-100 leading-relaxed my-2" {...p} />,
+  ul: (p: any) => <ul className="list-disc list-outside ml-5 my-2 space-y-1" {...p} />,
+  ol: (p: any) => <ol className="list-decimal list-outside ml-5 my-2 space-y-1" {...p} />,
+  li: (p: any) => <li className="text-zinc-100 leading-snug" {...p} />,
+  strong: (p: any) => <strong className="text-zinc-50 font-semibold" {...p} />,
+  em: (p: any) => <em className="text-zinc-200" {...p} />,
+  code: (p: any) => <code className="bg-zinc-800 text-zinc-100 px-1 py-0.5 rounded text-xs" {...p} />,
+  table: (p: any) => <table className="border-collapse text-xs my-2 w-full" {...p} />,
+  th: (p: any) => <th className="border border-zinc-700 px-2 py-1 bg-zinc-800 text-left" {...p} />,
+  td: (p: any) => <td className="border border-zinc-700 px-2 py-1 align-top" {...p} />,
+  hr: (p: any) => <hr className="border-zinc-700 my-3" {...p} />,
+  blockquote: (p: any) =>
+    <blockquote className="border-l-2 border-zinc-600 pl-3 my-2 text-zinc-300" {...p} />,
+}
+
 export function AssistantMessage({ content, response }: Props) {
   if (!response) {
-    return <p className="text-zinc-200 whitespace-pre-wrap">{content}</p>
+    return (
+      <div className="text-zinc-200">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>{content}</ReactMarkdown>
+      </div>
+    )
   }
 
   const { facts, hypotheses, warnings, requires_verification, metadata } = response
 
   return (
     <div className="space-y-4">
-      {/* Прямой ответ */}
-      <p className="text-zinc-100 leading-relaxed whitespace-pre-wrap">{response.answer}</p>
+      {/* Прямой ответ — теперь поддерживает markdown (заголовки, списки, таблицы) */}
+      <div className="text-zinc-100 leading-relaxed">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>
+          {response.answer}
+        </ReactMarkdown>
+      </div>
 
       {/* Факты */}
       {facts.length > 0 && (
