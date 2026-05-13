@@ -53,14 +53,16 @@ async def critique(
     query: str,
     answer_payload: dict,
     sources_excerpt: str,
-    max_tokens: int = 1200,
+    max_tokens: int = 600,
 ) -> dict:
     """Возвращает {ok, issues, missing_facts}."""
     # Компактуем answer payload — критику не нужно видеть полный markdown,
-    # достаточно понять структуру и факты.
+    # достаточно понять структуру и факты. ВАЖНО: НЕ передаём source_id в
+    # критику, потому что после регенерации LLM может перенять формат
+    # (title как source_id) и сломать связь с index_map. Просто отдаём
+    # утверждения как тексты.
     facts_brief = [
-        {"statement": f.statement if hasattr(f, "statement") else f.get("statement", ""),
-         "source_id": getattr(getattr(f, "source", None), "title", "") if hasattr(f, "source") else None}
+        (f.statement if hasattr(f, "statement") else f.get("statement", ""))
         for f in answer_payload.get("facts", [])[:30]
     ]
     answer_brief = {

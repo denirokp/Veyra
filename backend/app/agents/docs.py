@@ -551,9 +551,24 @@ async def run(
         raw, chunks, db
     )
 
-    # Self-correction только для full mode: ещё один LLM-вызов критикует ответ,
-    # и если есть проблемы — генерим заново с feedback'ом.
+    # Self-correction только для full mode и только когда критика реально
+    # серьёзная. Регенерация — последний шанс улучшить ответ, если станет
+    # хуже — откатываем.
     agents = ["docs"]
+    _NIL_UUID = "00000000-0000-0000-0000-000000000000"
+
+    def _valid_facts_count(fact_list) -> int:
+        """Считает только факты с реальной атрибуцией (не nil UUID)."""
+        n = 0
+        for f in fact_list or []:
+            src = getattr(f, "source", None)
+            if src is None:
+                continue
+            doc_id = str(getattr(src, "document_id", ""))
+            if doc_id and doc_id != _NIL_UUID:
+                n += 1
+        return n
+
     if mode == ChatMode.full and chunks:
         try:
             from app.skills.self_check import critique
@@ -565,16 +580,23 @@ async def run(
                 "requires_verification": requires,
             }
             crit = await critique(message, payload, context)
-            if not crit.get("ok", True) and (crit.get("issues") or crit.get("missing_facts")):
+            issues = crit.get("issues") or []
+            missing = crit.get("missing_facts") or []
+            # Регенерируем только если critique вернул >=2 проблем ИЛИ >=3
+            # пропущенных факта. Иначе цена регенерации > пользы.
+            serious = (not crit.get("ok", True)) and (len(issues) >= 2 or len(missing) >= 3)
+            if serious:
                 logger.info("self_check: regenerating with %d issues, %d missing",
-                            len(crit.get("issues", [])), len(crit.get("missing_facts", [])))
+                            len(issues), len(missing))
                 feedback = (
-                    "\n\nКРИТИКА ПРЕДЫДУЩЕЙ ВЕРСИИ ОТВЕТА (исправь эти проблемы):\n"
-                    + "\n".join(f"- {i}" for i in crit.get("issues", []))
+                    "\n\nКРИТИКА ПРЕДЫДУЩЕЙ ВЕРСИИ ОТВЕТА (исправь эти проблемы, "
+                    "но сохрани формат: source_id в facts должен быть ЦЕЛЫМ ЧИСЛОМ "
+                    "из заголовков [Источник N] в ФРАГМЕНТАХ выше):\n"
+                    + "\n".join(f"- {i}" for i in issues)
                     + (
                         "\n\nКЛЮЧЕВЫЕ ФАКТЫ КОТОРЫЕ НУЖНО ДОБАВИТЬ:\n"
-                        + "\n".join(f"- {f}" for f in crit.get("missing_facts", []))
-                        if crit.get("missing_facts") else ""
+                        + "\n".join(f"- {f}" for f in missing)
+                        if missing else ""
                     )
                 )
                 raw2 = await call_llm(
@@ -583,10 +605,19 @@ async def run(
                     max_tokens=max_tokens,
                 )
                 ans2, facts2, hyp2, warn2, req2 = await _parse_llm_response(raw2, chunks, db)
-                # Пере-используем результат если он не "пустой" (защита от регресса)
-                if ans2 and len(facts2) >= max(1, len(facts) - 2):
+                # Принимаем регенерацию только если она НЕ ухудшила атрибуцию.
+                # Часто регенерация ломает source_id mapping (LLM забывает что
+                # это число) — все факты валятся в nil UUID. Откат.
+                valid_before = _valid_facts_count(facts)
+                valid_after = _valid_facts_count(facts2)
+                if ans2 and valid_after >= max(1, valid_before - 1):
                     answer, facts, hypotheses, warnings, requires = ans2, facts2, hyp2, warn2, req2
                     agents.append("self_check")
+                    logger.info("self_check: accepted (valid sources %d → %d)",
+                                valid_before, valid_after)
+                else:
+                    logger.info("self_check: rejected regeneration (valid sources "
+                                "%d → %d, would degrade)", valid_before, valid_after)
         except Exception as exc:
             logger.warning("self_check pipeline error (skipping): %s", exc)
 
