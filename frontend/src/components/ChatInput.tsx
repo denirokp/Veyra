@@ -67,7 +67,7 @@ export function ChatInput({ onSend, onUpload, loading, uploading, prefill, onPre
   const busy = loading || uploading
 
   return (
-    <div className="border-t border-zinc-700 bg-zinc-900 px-4 py-3">
+    <div className="bg-zinc-900 px-4 py-3">
       <div
         className={clsx(
           'flex items-end gap-2 rounded-xl border px-3 py-2 transition-colors',

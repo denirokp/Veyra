@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent } from 'react'
 import clsx from 'clsx'
 import { useChatStore } from '../store/chat'
 import { ChatInput } from '../components/ChatInput'
+import { ModePicker } from '../components/ModePicker'
 import { AssistantMessage } from '../components/AssistantMessage'
 import { DocumentUploadMessage } from '../components/DocumentUploadMessage'
 
@@ -108,7 +109,8 @@ export function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
+      {/* Mode picker + Input */}
+      <ModePicker />
       <ChatInput
         onSend={send}
         onUpload={uploadFile}
