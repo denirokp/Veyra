@@ -144,10 +144,15 @@ async def run_initiative_review(
     async def _empty() -> list:
         return []
 
-    contradictions, logic_signals, entities = await asyncio.gather(
-        get_open_contradictions_for_docs(db, doc_ids) if doc_ids else _empty(),
-        get_open_logic_signals_for_docs(db, doc_ids) if doc_ids else _empty(),
-        search_entities_by_query(db, keywords, limit=15) if keywords else _empty(),
+    # AsyncSession не поддерживает параллельные запросы — выполняем последовательно
+    contradictions = await (
+        get_open_contradictions_for_docs(db, doc_ids) if doc_ids else _empty()
+    )
+    logic_signals = await (
+        get_open_logic_signals_for_docs(db, doc_ids) if doc_ids else _empty()
+    )
+    entities = await (
+        search_entities_by_query(db, keywords, limit=15) if keywords else _empty()
     )
 
     context = _build_context(title, text, chunks, contradictions, logic_signals, entities)
