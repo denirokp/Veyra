@@ -339,6 +339,7 @@ async def _parse_llm_response(
     index_map: dict[int, RetrievedChunk] = {i + 1: c for i, c in enumerate(chunks)}
 
     facts: list[FactItem] = []
+    unsupported_count = 0
     for f in data.get("facts", []):
         if not isinstance(f, dict) or not f.get("statement"):
             continue
@@ -349,6 +350,18 @@ async def _parse_llm_response(
         except (TypeError, ValueError):
             source_num = 0
         chunk = index_map.get(source_num)
+
+        # Программная проверка: подтверждается ли утверждение чанком-источником?
+        # Если LLM сослался на чанк который не содержит ключевых токенов
+        # утверждения — это галлюцинация, факт отбрасываем.
+        if chunk:
+            from app.skills.grounding import is_grounded
+            ok, reason = is_grounded(f["statement"], chunk.content or "")
+            if not ok:
+                unsupported_count += 1
+                logger.info("grounding: drop fact (%s): %s",
+                            reason, f["statement"][:80])
+                continue
 
         if chunk:
             doc_row = await get_document(db, chunk.document_id)
@@ -379,6 +392,15 @@ async def _parse_llm_response(
             )
 
         facts.append(FactItem(statement=f["statement"], source=source))
+
+    # Если значимая часть фактов не подтверждена — предупреждаем пользователя.
+    # Это даёт сигнал «модель пыталась галлюцинировать, мы отфильтровали».
+    if unsupported_count > 0:
+        warnings.insert(
+            0,
+            f"⚠️ Отфильтровано {unsupported_count} утверждений: "
+            f"не подтверждены содержимым источников (защита от галлюцинаций)",
+        )
 
     return answer, facts, hypotheses, warnings, requires
 
