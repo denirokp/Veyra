@@ -1,4 +1,6 @@
 """ChromaDB wrapper — коллекции по статусу документа."""
+from __future__ import annotations
+
 from typing import Any
 
 import chromadb
@@ -6,10 +8,10 @@ from chromadb import Collection
 
 from app.settings import settings
 
-_client: chromadb.PersistentClient | None = None
+_client: chromadb.ClientAPI | None = None
 
 
-def get_client() -> chromadb.PersistentClient:
+def get_client() -> chromadb.ClientAPI:
     global _client
     if _client is None:
         _client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
