@@ -26,6 +26,9 @@ async def get_numeric_contradictions(
     for c in items:
         doc_a = await get_document(db, c.document_id_a)
         doc_b = await get_document(db, c.document_id_b)
+        # Пропускаем legacy-осиротевшие расхождения: оба документа удалены.
+        if not doc_a and not doc_b:
+            continue
         result.append({
             "id": c.id,
             "metric": c.metric,
@@ -34,12 +37,12 @@ async def get_numeric_contradictions(
             "period": c.period,
             "document_a": {
                 "id": c.document_id_a,
-                "title": doc_a.title if doc_a else c.document_id_a,
+                "title": doc_a.title if doc_a else "Документ удалён",
                 "hierarchy_level": doc_a.hierarchy_level if doc_a else None,
             },
             "document_b": {
                 "id": c.document_id_b,
-                "title": doc_b.title if doc_b else c.document_id_b,
+                "title": doc_b.title if doc_b else "Документ удалён",
                 "hierarchy_level": doc_b.hierarchy_level if doc_b else None,
             },
             "status": c.status,
@@ -105,6 +108,9 @@ async def get_logic_signals(
     for s in items:
         doc_a = await get_document(db, s.document_id_a)
         doc_b = await get_document(db, s.document_id_b)
+        # Пропускаем legacy-осиротевшие сигналы.
+        if not doc_a and not doc_b:
+            continue
         result.append({
             "id": s.id,
             "signal_type": s.signal_type,
@@ -112,13 +118,13 @@ async def get_logic_signals(
             "statement_b": s.statement_b,
             "document_a": {
                 "id": s.document_id_a,
-                "title": doc_a.title if doc_a else s.document_id_a,
+                "title": doc_a.title if doc_a else "Документ удалён",
                 "hierarchy_level": doc_a.hierarchy_level if doc_a else None,
                 "created_at": str(doc_a.created_at) if doc_a and doc_a.created_at else None,
             },
             "document_b": {
                 "id": s.document_id_b,
-                "title": doc_b.title if doc_b else s.document_id_b,
+                "title": doc_b.title if doc_b else "Документ удалён",
                 "hierarchy_level": doc_b.hierarchy_level if doc_b else None,
                 "created_at": str(doc_b.created_at) if doc_b and doc_b.created_at else None,
             },

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from pathlib import Path
@@ -87,9 +88,10 @@ async def upload_document(
     doc_id = str(uuid.uuid4())
     file_path = DOCS_DIR / f"{doc_id}{suffix}"
 
-    # Стримим в файл с проверкой кумулятивного размера — иначе
-    # shutil.copyfileobj принесёт хоть гигабайт.
+    # Стримим в файл с проверкой кумулятивного размера и считаем SHA-256
+    # для дедупликации повторных загрузок.
     bytes_written = 0
+    hasher = hashlib.sha256()
     with file_path.open("wb") as f:
         while True:
             chunk = await file.read(1024 * 1024)  # 1 МБ за раз
@@ -103,7 +105,18 @@ async def upload_document(
                     413,
                     f"Файл больше лимита {MAX_UPLOAD_BYTES // (1024 * 1024)} МБ",
                 )
+            hasher.update(chunk)
             f.write(chunk)
+
+    file_hash = hasher.hexdigest()
+
+    # Дедупликация: тот же контент уже грузили — возвращаем существующий
+    # документ и удаляем дубль с диска (он бы запустил повторную индексацию).
+    from app.storage.sql_db import get_document_by_hash
+    existing = await get_document_by_hash(db, file_hash)
+    if existing:
+        file_path.unlink(missing_ok=True)
+        return _to_out(existing)
 
     doc_title = title or Path(raw_name).stem or "Без названия"
 
@@ -119,6 +132,7 @@ async def upload_document(
             "is_anchor": is_anchor,
             "confluence_url": confluence_url,
             "file_path": str(file_path),
+            "file_hash": file_hash,
             "chunk_count": 0,
         },
     )
@@ -193,18 +207,27 @@ async def patch_doc(
 @router.delete("/documents/{doc_id}")
 async def delete_doc(doc_id: str, db: AsyncSession = Depends(get_session)):
     from app.storage import vector_db
-    from sqlalchemy import delete
-    from app.storage.sql_db import Document, Chunk
+    from app.storage.sql_db import cascade_delete_document
 
     doc = await get_document(db, doc_id)
     if not doc:
         raise HTTPException(404, "Документ не найден")
 
+    file_path = doc.file_path
+
+    # 1. Чанки из Chroma (обе коллекции — может быть в любой)
     vector_db.delete_document_chunks(doc_id, "actual")
     vector_db.delete_document_chunks(doc_id, "archive")
 
-    await db.execute(delete(Chunk).where(Chunk.document_id == doc_id))
-    await db.execute(delete(Document).where(Document.id == doc_id))
-    await db.commit()
+    # 2. SQL — каскадно удалить entities/promises/contradictions/signals/relations/chunks
+    await cascade_delete_document(db, doc_id)
+
+    # 3. Файл на диске
+    if file_path:
+        try:
+            Path(file_path).unlink(missing_ok=True)
+        except OSError:
+            # Не критично — оставшийся файл не ломает работу системы
+            pass
 
     return {"deleted": doc_id}

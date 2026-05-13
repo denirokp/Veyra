@@ -5,7 +5,7 @@ from datetime import date as _date
 
 from sqlalchemy import (
     Boolean, Column, Date, DateTime, Float, ForeignKey,
-    Integer, String, Text, func,
+    Integer, String, Text, func, text,
 )
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -68,6 +68,7 @@ class Document(Base):
     hierarchy_level = Column(Integer)
     confluence_url = Column(Text)
     file_path = Column(Text)
+    file_hash = Column(String, index=True)
     chunk_count = Column(Integer)
     indexed_at = Column(DateTime, server_default=func.now())
 
@@ -205,13 +206,65 @@ def compute_hierarchy_level(
     return 5
 
 
+async def cascade_delete_document(session: AsyncSession, document_id: str) -> None:
+    """Удаление документа со всеми связанными записями.
+    SQLite не enforced cascade на старых таблицах — вычищаем вручную чтобы
+    не оставлять осиротевшие сущности/обещания/контрадикции/сигналы."""
+    from sqlalchemy import delete as _delete, or_
+    # Связи которые ссылаются на этот документ как одну из сторон
+    await session.execute(_delete(NumericContradiction).where(
+        or_(NumericContradiction.document_id_a == document_id,
+            NumericContradiction.document_id_b == document_id)
+    ))
+    await session.execute(_delete(LogicSignal).where(
+        or_(LogicSignal.document_id_a == document_id,
+            LogicSignal.document_id_b == document_id)
+    ))
+    await session.execute(_delete(DocumentRelation).where(
+        or_(DocumentRelation.source_id == document_id,
+            DocumentRelation.target_id == document_id)
+    ))
+    # Простые owned-сущности
+    await session.execute(_delete(Entity).where(Entity.document_id == document_id))
+    await session.execute(_delete(Promise).where(Promise.document_id == document_id))
+    await session.execute(_delete(Chunk).where(Chunk.document_id == document_id))
+    await session.execute(_delete(Document).where(Document.id == document_id))
+    await session.commit()
+
+
+async def get_document_by_hash(
+    session: AsyncSession, file_hash: str
+) -> Document | None:
+    from sqlalchemy import select as _select
+    result = await session.execute(
+        _select(Document).where(Document.file_hash == file_hash)
+    )
+    return result.scalar_one_or_none()
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
+        # PRAGMA foreign_keys=ON в SQLite по умолчанию ВЫКЛЮЧЕНО — без этого
+        # FK-constraints не enforced. Включаем для каждой сессии в get_session.
         await conn.run_sync(Base.metadata.create_all)
+        # Лёгкая миграция: добавляем file_hash для существующих БД (SQLite
+        # `create_all` не апгрейдит схему — добавляем колонку вручную).
+        try:
+            await conn.exec_driver_sql(
+                "ALTER TABLE documents ADD COLUMN file_hash VARCHAR"
+            )
+            await conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_documents_file_hash ON documents(file_hash)"
+            )
+        except Exception:
+            # Колонка уже есть — норма
+            pass
 
 
 async def get_session() -> AsyncSession:
     async with AsyncSession(engine) as session:
+        # PRAGMA на каждое соединение — иначе CASCADE-удаления не сработают
+        await session.execute(text("PRAGMA foreign_keys=ON"))
         yield session
 
 
