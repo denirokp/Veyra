@@ -107,7 +107,8 @@ async def call_llm(
             max_tokens=max_tokens,
             messages=[{"role": "system", "content": system}, *messages],
         )
-        return response.choices[0].message.content.strip()
+        # reasoning-модели и редкие провайдер-ошибки иногда возвращают content=None
+        return (response.choices[0].message.content or "").strip()
 
     return await _with_retry(_call, label="llm")
 

@@ -105,7 +105,7 @@ class DocumentOut(BaseModel):
     title: str
     type: Optional[DocumentType] = None
     status: DocumentStatus
-    hierarchy_level: int
+    hierarchy_level: Optional[int] = None
     segment: Optional[str] = None
     author: Optional[str] = None
     created_at: Optional[date] = None
