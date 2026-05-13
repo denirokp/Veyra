@@ -192,6 +192,13 @@ async def check_and_save_contradictions(
                 continue
             if not _same_period(metric.get("date_context"), str(existing_entity.date_context or "")):
                 continue
+            # Разные units (% vs руб, шт vs тыс) — это не противоречие, а разные
+            # метрики с похожим именем. Засчитываем только при совпадающих
+            # либо отсутствующих units.
+            unit_a = (metric.get("unit") or "").strip().lower() or None
+            unit_b = (existing_entity.unit or "").strip().lower() or None
+            if unit_a and unit_b and unit_a != unit_b:
+                continue
 
             contradiction = {
                 "id": str(uuid.uuid4()),

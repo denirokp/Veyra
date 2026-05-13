@@ -63,6 +63,27 @@ def _apply_hierarchy_boost(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]
     return sorted(chunks, key=lambda c: c.score, reverse=True)
 
 
+def _dedupe_overlapping(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """Чанки рядом по индексу + один документ часто имеют overlap (50 токенов
+    окно). После RAG это даёт «два соседних чанка с почти одинаковым текстом»
+    в топе и LLM получает дубль контекста. Убираем дубли по пересечению
+    префикса 200 символов внутри одного документа."""
+    kept: list[RetrievedChunk] = []
+    seen_prefixes: dict[str, list[str]] = {}
+    for c in chunks:
+        doc_id = c.document_id or c.id
+        prefix = (c.content or "")[:200].strip().lower()
+        if not prefix:
+            kept.append(c)
+            continue
+        previous = seen_prefixes.setdefault(doc_id, [])
+        if any(prefix in p or p in prefix for p in previous):
+            continue  # дубль с уже добавленным чанком из того же документа
+        previous.append(prefix)
+        kept.append(c)
+    return kept
+
+
 def _bm25_search(
     query: str,
     candidates: list[RetrievedChunk],
@@ -145,7 +166,10 @@ async def retrieve(
     # Hierarchy boost
     boosted = _apply_hierarchy_boost(fused)
 
-    return boosted[:top_k]
+    # Дедуп overlapping чанков (соседи по индексу часто пересекаются)
+    deduped = _dedupe_overlapping(boosted)
+
+    return deduped[:top_k]
 
 
 async def retrieve_for_writing(

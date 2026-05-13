@@ -15,6 +15,22 @@ from app.storage.sql_db import save_chunks
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html"}
 
 
+def _strip_html(raw: str) -> str:
+    """Минимальная очистка HTML — теги удаляем, &amp; и т.п. раскодируем.
+    Без сторонней библиотеки чтобы не тащить bs4 ради одного формата."""
+    import html as _html
+    import re as _re
+    text = _re.sub(r"<script\b[^>]*>.*?</script>", " ", raw, flags=_re.S | _re.I)
+    text = _re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=_re.S | _re.I)
+    text = _re.sub(r"<br\s*/?>", "\n", text, flags=_re.I)
+    text = _re.sub(r"</p>|</div>|</li>|</tr>", "\n", text, flags=_re.I)
+    text = _re.sub(r"<[^>]+>", " ", text)
+    text = _html.unescape(text)
+    text = _re.sub(r"[ \t]+", " ", text)
+    text = _re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def parse_text(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
@@ -25,17 +41,29 @@ def parse_text(file_path: Path) -> str:
     if suffix == ".docx":
         import docx as python_docx
         doc = python_docx.Document(file_path)
-        paragraphs = []
+        parts: list[str] = []
         for para in doc.paragraphs:
-            if para.text.strip():
-                if para.style.name.startswith("Heading"):
-                    level = para.style.name.split()[-1]
-                    paragraphs.append(f"{'#' * int(level)} {para.text}")
-                else:
-                    paragraphs.append(para.text)
-        return "\n\n".join(paragraphs)
-    if suffix in (".md", ".txt", ".html"):
-        return file_path.read_text(encoding="utf-8")
+            if not para.text.strip():
+                continue
+            if para.style.name.startswith("Heading"):
+                level = para.style.name.split()[-1]
+                try:
+                    parts.append(f"{'#' * int(level)} {para.text}")
+                except ValueError:
+                    parts.append(para.text)
+            else:
+                parts.append(para.text)
+        # Таблицы — бизнес-цифры часто в них (целевая аудитория, метрики, KPI).
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                if cells:
+                    parts.append(" | ".join(cells))
+        return "\n\n".join(parts)
+    if suffix in (".md", ".txt"):
+        return file_path.read_text(encoding="utf-8", errors="replace")
+    if suffix == ".html":
+        return _strip_html(file_path.read_text(encoding="utf-8", errors="replace"))
     raise ValueError(f"Unsupported format: {suffix}")
 
 
