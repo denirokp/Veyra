@@ -38,5 +38,16 @@ class Settings(BaseSettings):
     # (logic signals — pairwise сравнение пар документов).
     DISABLE_LOGIC_SIGNALS: bool = False
 
+    # Опциональная авторизация по статичному bearer-токену. Если задан —
+    # все API endpoints кроме /health требуют заголовок
+    #   Authorization: Bearer <API_AUTH_TOKEN>
+    # Если пуст (по умолчанию) — API открыт (local dev / без auth).
+    # Минимум 16 символов рекомендуется для прода.
+    API_AUTH_TOKEN: str = ""
+
+    # Максимальный размер JSON body для chat/initiative — защита от
+    # случайного 50MB body, который положит LLM-контекст и/или память.
+    MAX_REQUEST_BODY_MB: int = 5
+
 
 settings = Settings()

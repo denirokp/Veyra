@@ -1,8 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api import chat, contradictions, docs, documents, initiative, metrics, promises
 from app.storage.sql_db import init_db, mark_overdue_promises, AsyncSession, engine
@@ -41,9 +42,49 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Только нужные методы. Без OPTIONS не пройдёт preflight.
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    # Только нужные хедеры — Authorization для bearer, Content-Type для JSON/multipart.
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+
+@app.middleware("http")
+async def _auth_and_body_limit(request: Request, call_next):
+    """Опциональный bearer-токен + защита от слишком больших bodies.
+
+    Health-check и preflight остаются открытыми. Если API_AUTH_TOKEN не
+    задан — все эндпоинты доступны (local dev). Если задан — non-health
+    требуют корректный Bearer.
+    """
+    path = request.url.path
+    method = request.method
+
+    # Тело — отбрасываем превышение раньше любых auth/CPU работ.
+    cl = request.headers.get("content-length")
+    if cl and cl.isdigit():
+        if int(cl) > _settings.MAX_REQUEST_BODY_MB * 1024 * 1024:
+            return JSONResponse(
+                {"detail": f"Request body too large (max {_settings.MAX_REQUEST_BODY_MB} MB)"},
+                status_code=413,
+            )
+
+    # /health и preflight — без auth
+    if path == "/health" or method == "OPTIONS":
+        return await call_next(request)
+
+    if _settings.API_AUTH_TOKEN:
+        auth = request.headers.get("authorization", "")
+        expected = f"Bearer {_settings.API_AUTH_TOKEN}"
+        if auth != expected:
+            return JSONResponse(
+                {"detail": "Unauthorized"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    return await call_next(request)
+
 
 app.include_router(chat.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
