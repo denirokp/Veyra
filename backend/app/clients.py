@@ -1,41 +1,43 @@
-"""Singleton clients для Anthropic LLM и OpenAI Embeddings, плюс retry-обёртка."""
+"""LLM-клиент (OpenAI-совместимый, поддерживает Kimi/Moonshot, OpenAI, Avito proxy)
+и локальные embeddings через sentence-transformers."""
 from __future__ import annotations
 
 import asyncio
 import logging
 from typing import Awaitable, Callable, TypeVar
 
-import anthropic
 import openai
 
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
-_anthropic: anthropic.AsyncAnthropic | None = None
-_openai: openai.AsyncOpenAI | None = None
+_llm_client: openai.AsyncOpenAI | None = None
+_embedder = None  # SentenceTransformer, lazy-loaded
 
 T = TypeVar("T")
 
 
-def get_llm() -> anthropic.AsyncAnthropic:
-    global _anthropic
-    if _anthropic is None:
-        kwargs: dict = {"api_key": settings.ANTHROPIC_API_KEY}
-        if settings.ANTHROPIC_BASE_URL:
-            kwargs["base_url"] = settings.ANTHROPIC_BASE_URL
-        _anthropic = anthropic.AsyncAnthropic(**kwargs)
-    return _anthropic
+def get_llm_client() -> openai.AsyncOpenAI:
+    """OpenAI-совместимый клиент. Для Kimi подставляем base_url=https://api.moonshot.ai/v1."""
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = openai.AsyncOpenAI(
+            api_key=settings.LLM_API_KEY,
+            base_url=settings.LLM_BASE_URL or None,
+        )
+    return _llm_client
 
 
-def get_embeddings_client() -> openai.AsyncOpenAI:
-    global _openai
-    if _openai is None:
-        kwargs: dict = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            kwargs["base_url"] = settings.OPENAI_BASE_URL
-        _openai = openai.AsyncOpenAI(**kwargs)
-    return _openai
+def get_embedder():
+    """Лениво инициализирует sentence-transformers модель. Первый вызов тяжёлый (~5s + загрузка)."""
+    global _embedder
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+        logger.info("Загружаю embedding-модель: %s", settings.EMBEDDING_MODEL)
+        _embedder = SentenceTransformer(settings.EMBEDDING_MODEL)
+        logger.info("Embedding-модель загружена, dim=%d", _embedder.get_sentence_embedding_dimension())
+    return _embedder
 
 
 async def _with_retry(
@@ -45,12 +47,12 @@ async def _with_retry(
     base_delay: float = 1.0,
     label: str = "llm",
 ) -> T:
-    """Экспоненциальный backoff: 1s → 2s → 4s. Бросает последнюю ошибку, если все попытки упали."""
+    """Экспоненциальный backoff: 1s → 2s → 4s."""
     last_exc: Exception | None = None
     for attempt in range(max_attempts):
         try:
             return await fn()
-        except Exception as exc:  # ловим всё, включая APIConnectionError / RateLimitError
+        except Exception as exc:
             last_exc = exc
             if attempt == max_attempts - 1:
                 logger.error("%s retry exhausted (%d attempts): %s", label, max_attempts, exc)
@@ -64,16 +66,22 @@ async def _with_retry(
 
 
 async def embed(texts: list[str]) -> list[list[float]]:
-    """Возвращает эмбеддинги для списка текстов. С ретраями."""
-    async def _call() -> list[list[float]]:
-        client = get_embeddings_client()
-        response = await client.embeddings.create(
-            model=settings.EMBEDDING_MODEL,
-            input=texts,
-        )
-        return [item.embedding for item in response.data]
+    """Локальный embeddings batch. Гоняем encode в отдельном thread'е чтобы не блокировать loop."""
+    if not texts:
+        return []
 
-    return await _with_retry(_call, label="embed")
+    def _encode() -> list[list[float]]:
+        model = get_embedder()
+        vectors = model.encode(
+            texts,
+            batch_size=32,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        )
+        return [v.tolist() for v in vectors]
+
+    return await asyncio.to_thread(_encode)
 
 
 async def embed_one(text: str) -> list[float]:
@@ -87,15 +95,20 @@ async def call_llm(
     messages: list[dict],
     max_tokens: int,
 ) -> str:
-    """Унифицированный LLM-вызов с ретраями. Возвращает текст первого блока ответа."""
+    """LLM-вызов через OpenAI-совместимый API. С ретраями. Возвращает текст ответа."""
     async def _call() -> str:
-        llm = get_llm()
-        response = await llm.messages.create(
+        client = get_llm_client()
+        response = await client.chat.completions.create(
             model=settings.LLM_MODEL,
             max_tokens=max_tokens,
-            system=system,
-            messages=messages,
+            messages=[{"role": "system", "content": system}, *messages],
         )
-        return response.content[0].text.strip()
+        return response.choices[0].message.content.strip()
 
     return await _with_retry(_call, label="llm")
+
+
+# ── Backward-compat ──────────────────────────────────────────────────────────
+# Старые места кода могут вызывать get_llm() — оставляем алиас, но рекомендуем call_llm().
+def get_llm() -> openai.AsyncOpenAI:
+    return get_llm_client()

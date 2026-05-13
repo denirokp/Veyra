@@ -4,15 +4,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # LLM
-    ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_BASE_URL: str = ""
-    LLM_MODEL: str = "claude-sonnet-4-20250514"
+    # LLM — OpenAI-совместимый протокол (работает с Kimi/Moonshot, OpenAI, Avito proxy и др.)
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.moonshot.ai/v1"
+    LLM_MODEL: str = "kimi-k2-0905-preview"
 
-    # Embeddings
-    OPENAI_API_KEY: str = ""
-    OPENAI_BASE_URL: str = ""
-    EMBEDDING_MODEL: str = "text-embedding-3-large"
+    # Embeddings — локальная sentence-transformers модель (без интернета).
+    # Первый запуск скачивает ~500МБ в ~/.cache/huggingface.
+    EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
     # Storage
     CHROMA_PERSIST_DIR: str = "./data/chroma"
