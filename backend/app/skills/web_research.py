@@ -146,14 +146,73 @@ def format_for_prompt(results: list[dict], max_chars: int = 8000) -> str:
     return "\n".join(parts)
 
 
-async def do_research(query: str, max_results: int = 5) -> str:
+_INTL_TOPICS = (
+    "amazon", "shopify", "etsy", "stripe", "ebay", "alibaba",
+    "saas", "best practices", "industry", "global",
+    "pendo", "appcues", "userpilot", "intercom", "segment",
+    "mixpanel", "amplitude",
+)
+
+
+def _maybe_english_query(query: str) -> str | None:
+    """Если запрос про международные продукты на русском — генерируем
+    его английскую версию для лучших результатов поиска. Иначе None."""
+    q_lower = query.lower()
+    if not any(t in q_lower for t in _INTL_TOPICS):
+        return None
+    # Простая замена ключевых терминов
+    replacements = {
+        "онбординг": "onboarding",
+        "продавцов": "sellers",
+        "продавцы": "sellers",
+        "обучени": "training",
+        "лучшие практики": "best practices",
+        "опыт": "experience",
+        "конкуренты": "competitors",
+        "из мира": "industry",
+        "в мире": "industry global",
+        "как организован": "how to organize",
+        "как делают": "how do",
+        "стратегия": "strategy",
+        "маркетплейс": "marketplace",
+        "бенчмарк": "benchmark",
+    }
+    en = query
+    for ru, en_term in replacements.items():
+        en = re.sub(ru, en_term, en, flags=re.IGNORECASE)
+    return en[:300]
+
+
+async def do_research(query: str, max_results: int = 10) -> str:
     """Полный пайплайн: query → результаты поиска → форматированный блок.
+    Для международных тем делает 2 поиска: на русском и на английском —
+    больше шансов поймать качественные источники.
     Возвращает пустую строку если поиск выключен или ничего не нашлось."""
     search_q = _generate_search_query(query)
     if not search_q:
         return ""
+
+    all_results: list[dict] = []
+    seen_urls: set[str] = set()
+
+    # Основной поиск
     results = await search(search_q, max_results=max_results)
-    if not results:
+    for r in results:
+        if r.get("url") and r["url"] not in seen_urls:
+            seen_urls.add(r["url"])
+            all_results.append(r)
+
+    # Дополнительный поиск на английском для международных тем
+    en_q = _maybe_english_query(search_q)
+    if en_q and en_q != search_q:
+        en_results = await search(en_q, max_results=max_results)
+        for r in en_results:
+            if r.get("url") and r["url"] not in seen_urls:
+                seen_urls.add(r["url"])
+                all_results.append(r)
+        logger.info("web_research: +en query %r → %d more results", en_q[:50], len(en_results))
+
+    if not all_results:
         return ""
-    logger.info("web_research: %d results for %r", len(results), search_q[:60])
-    return format_for_prompt(results)
+    logger.info("web_research: %d total results for %r", len(all_results), search_q[:60])
+    return format_for_prompt(all_results, max_chars=12000)
