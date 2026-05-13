@@ -2,19 +2,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
+from app.clients import call_llm
 from app.models.schemas import ChatMode, ChatResponse, FactItem, SourceRef
 from app.rag.retriever import RetrievedChunk, retrieve
-from app.settings import settings
 from app.storage.sql_db import (
     get_document,
     get_open_contradictions_for_docs,
     search_entities_by_query,
 )
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 Ты аналитик корпоративной памяти команды Avito. У тебя есть доступ к внутренним \
@@ -139,8 +141,13 @@ async def _parse_llm_response(
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if match:
-            data = json.loads(match.group())
+            try:
+                data = json.loads(match.group())
+            except json.JSONDecodeError as e:
+                logger.warning("docs_agent: regex-fallback не распарсился: %s | head=%r", e, raw[:200])
+                return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
         else:
+            logger.warning("docs_agent: невалидный JSON | head=%r", raw[:200])
             return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
 
     answer = data.get("answer", "")
@@ -224,14 +231,23 @@ async def run(
         + f"\n\nВОПРОС: {message}"
     )
 
-    llm = get_llm()
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_message}],
-    )
-    raw = response.content[0].text.strip()
+    try:
+        raw = await call_llm(
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+            max_tokens=4096,
+        )
+    except Exception as e:
+        logger.error("docs_agent: LLM call failed: %s", e)
+        return {
+            "answer": "",
+            "facts": [],
+            "hypotheses": [],
+            "warnings": [f"⚠️ Ошибка обращения к LLM: {e}"],
+            "requires_verification": [],
+            "chunks_used": len(chunks),
+            "agents_used": ["docs"],
+        }
 
     answer, facts, hypotheses, warnings, requires = await _parse_llm_response(
         raw, chunks, db

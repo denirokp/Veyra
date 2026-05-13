@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
-from app.settings import settings
+from app.clients import call_llm
 from app.storage.sql_db import search_entities_by_query
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 Ты аналитик KPI. Ты получаешь описание инициативы или документа и список метрик,
@@ -54,22 +56,24 @@ async def suggest_missing_metrics(
         f"Инициатива: {title}\n\n"
         f"Описание: {text[:1000]}\n\n"
         + (
-            f"Метрики уже упомянутые в документах:\n" + "\n".join(f"- {m}" for m in existing_metrics)
+            "Метрики уже упомянутые в документах:\n" + "\n".join(f"- {m}" for m in existing_metrics)
             if existing_metrics
             else "Метрики в документах не найдены."
         )
     )
 
-    llm = get_llm()
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_msg}],
-    )
+    try:
+        raw = await call_llm(
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+            max_tokens=1024,
+        )
+    except Exception as e:
+        logger.error("suggest_missing_metrics: LLM call failed: %s", e)
+        return []
 
-    raw = response.content[0].text.strip()
     try:
         return json.loads(raw)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning("suggest_missing_metrics: невалидный JSON: %s | head=%r", e, raw[:200])
         return []

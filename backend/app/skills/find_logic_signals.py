@@ -1,16 +1,20 @@
 """Skill: find_logic_signals — поиск стратегических/операционных конфликтов в подходах."""
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import os
 import uuid
 from itertools import combinations
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
-from app.settings import settings
+from app.clients import call_llm
 from app.storage.sql_db import Chunk, Document, save_logic_signals
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 Ты аналитик стратегических документов. Найди пары утверждений из РАЗНЫХ документов,
@@ -57,25 +61,30 @@ def _chunk_docs_for_comparison(docs_with_chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-async def _find_signals_in_pair(
-    doc_a: dict,
-    doc_b: dict,
-) -> list[dict]:
+async def _find_signals_in_pair(doc_a: dict, doc_b: dict) -> list[dict]:
     """LLM-анализ пары документов на логические конфликты."""
-    llm = get_llm()
     content = _chunk_docs_for_comparison([doc_a, doc_b])
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=2048,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
-    )
-    raw = response.content[0].text.strip()
+    try:
+        raw = await call_llm(
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+            max_tokens=2048,
+        )
+    except Exception as e:
+        logger.error("logic_signals pair (%s × %s): LLM call failed: %s",
+                     doc_a.get("id", "?")[:8], doc_b.get("id", "?")[:8], e)
+        return []
     try:
         signals = json.loads(raw)
         return [s for s in signals if isinstance(s, dict) and s.get("confidence", 0) >= 0.6]
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning("logic_signals pair: невалидный JSON: %s | head=%r", e, raw[:200])
         return []
+
+
+def _signals_enabled() -> bool:
+    """Можно отключить через env при bulk-индексации, чтобы не жечь квоту."""
+    return os.getenv("DISABLE_LOGIC_SIGNALS", "").lower() not in ("1", "true", "yes")
 
 
 async def find_logic_signals_for_document(
@@ -85,9 +94,12 @@ async def find_logic_signals_for_document(
 ) -> list[dict]:
     """
     При загрузке нового документа — проверяем против топ-N actual документов.
-    Ограничиваем число пар чтобы не гонять LLM по всем документам при каждой загрузке.
+    Параллелим LLM-вызовы. Можно отключить целиком env-переменной DISABLE_LOGIC_SIGNALS=1.
     """
-    # Берём краткое содержание нового документа
+    if not _signals_enabled():
+        logger.info("logic_signals: пропущено (DISABLE_LOGIC_SIGNALS)")
+        return []
+
     new_result = await db.execute(
         select(Document, Chunk.content)
         .join(Chunk, Chunk.document_id == Document.id)
@@ -107,7 +119,6 @@ async def find_logic_signals_for_document(
         "content": new_content,
     }
 
-    # Выбираем actual документы с L1-L3 для сравнения
     existing_result = await db.execute(
         select(Document, Chunk.content)
         .join(Chunk, Chunk.document_id == Document.id)
@@ -124,9 +135,8 @@ async def find_logic_signals_for_document(
     if not existing_rows:
         return []
 
-    all_signals: list[dict] = []
-    for doc_obj, content in existing_rows:
-        existing_doc = {
+    existing_docs = [
+        {
             "id": doc_obj.id,
             "title": doc_obj.title,
             "status": doc_obj.status,
@@ -134,11 +144,21 @@ async def find_logic_signals_for_document(
             "created_at": str(doc_obj.created_at or ""),
             "content": content,
         }
-        raw_signals = await _find_signals_in_pair(new_doc, existing_doc)
+        for doc_obj, content in existing_rows
+    ]
+
+    # Параллельно опрашиваем все пары
+    pair_results = await asyncio.gather(
+        *[_find_signals_in_pair(new_doc, ed) for ed in existing_docs],
+        return_exceptions=False,
+    )
+
+    all_signals: list[dict] = []
+    for ed, raw_signals in zip(existing_docs, pair_results):
+        docs = [new_doc, ed]
         for s in raw_signals:
             doc_idx_a = s.get("doc_index_a", 0)
             doc_idx_b = s.get("doc_index_b", 1)
-            docs = [new_doc, existing_doc]
             if doc_idx_a >= len(docs) or doc_idx_b >= len(docs):
                 continue
             all_signals.append({
@@ -186,9 +206,14 @@ async def find_logic_signals_on_demand(
         for r in rows
     ]
 
+    pairs = list(combinations(doc_list, 2))
+    pair_results = await asyncio.gather(
+        *[_find_signals_in_pair(a, b) for a, b in pairs],
+        return_exceptions=False,
+    )
+
     all_signals: list[dict] = []
-    for (da, db_doc) in combinations(doc_list, 2):
-        raw = await _find_signals_in_pair(da, db_doc)
+    for (da, db_doc), raw in zip(pairs, pair_results):
         for s in raw:
             docs = [da, db_doc]
             doc_idx_a = s.get("doc_index_a", 0)

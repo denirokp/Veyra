@@ -3,18 +3,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
+from app.clients import call_llm
 from app.rag.retriever import retrieve
-from app.settings import settings
 from app.skills.market_agent import get_market_context
 from app.storage.sql_db import (
     get_open_contradictions_for_docs,
     get_open_logic_signals_for_docs,
     search_entities_by_query,
 )
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 Ты аналитик корпоративной памяти. Ты получаешь текст инициативы и релевантный контекст
@@ -161,33 +163,41 @@ async def run_initiative_review(
                 market_lines.append(f"• {c['name']}: {c['approach']}")
         context += "\n" + "\n".join(market_lines)
 
-    llm = get_llm()
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=3000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": context}],
-    )
-
-    raw = response.content[0].text.strip()
     try:
-        result = json.loads(raw)
+        raw = await call_llm(
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": context}],
+            max_tokens=3000,
+        )
+    except Exception as e:
+        logger.error("initiative_review: LLM call failed: %s", e)
+        raw = ""
+
+    try:
+        result = json.loads(raw) if raw else {}
     except json.JSONDecodeError:
-        # Попытка вытащить JSON из ответа если LLM добавил текст вокруг
         import re
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if match:
-            result = json.loads(match.group())
+            try:
+                result = json.loads(match.group())
+            except json.JSONDecodeError as e:
+                logger.warning("initiative_review: regex-fallback не распарсился: %s", e)
+                result = {}
         else:
-            result = {
-                "summary": "Не удалось разобрать ответ LLM",
-                "strategic_anchors": [],
-                "conflicts": [],
-                "gaps": [],
-                "analogues": [],
-                "external_context": "Нет данных",
-                "recommendation": {"verdict": "needs_work", "reasoning": raw[:500]},
-            }
+            logger.warning("initiative_review: невалидный JSON, head=%r", raw[:200])
+            result = {}
+
+    if not result:
+        result = {
+            "summary": "Не удалось разобрать ответ LLM",
+            "strategic_anchors": [],
+            "conflicts": [],
+            "gaps": [],
+            "analogues": [],
+            "external_context": "Нет данных",
+            "recommendation": {"verdict": "needs_work", "reasoning": raw[:500] or "LLM не ответил"},
+        }
 
     return {
         **result,

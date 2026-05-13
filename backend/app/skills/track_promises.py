@@ -1,14 +1,17 @@
-"""Skill: track_promises — извлечение обещаний и планов из документа."""
+"""Skill: track_promises — извлечение обещаний с чанкингом и логированием."""
 from __future__ import annotations
 
 import json
+import logging
+import re
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
-from app.settings import settings
+from app.clients import call_llm
 from app.storage.sql_db import save_promises
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 Ты аналитик планов и обещаний. Найди в тексте все обещания, планы, намерения команды.
@@ -36,31 +39,87 @@ SYSTEM_PROMPT = """\
 Ответь ТОЛЬКО JSON массивом, без markdown.\
 """
 
+CHUNK_SIZE = 6000
+MAX_CHUNKS = 8
+
+
+def _parse_json_array(raw: str, source_label: str) -> list[dict]:
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+        logger.warning("promises/%s: ожидался JSON array, получено %s", source_label, type(data).__name__)
+        return []
+    except json.JSONDecodeError:
+        match = re.search(r"\[.*\]", raw, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError as e:
+                logger.warning("promises/%s: regex-fallback не распарсился: %s | head=%r",
+                               source_label, e, raw[:200])
+                return []
+        logger.warning("promises/%s: невалидный JSON, [] | head=%r", source_label, raw[:200])
+        return []
+
+
+def _chunk_text(text: str) -> list[str]:
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    buffer: list[str] = []
+    buffer_len = 0
+    for p in paragraphs:
+        plen = len(p) + 2
+        if buffer_len + plen > CHUNK_SIZE and buffer:
+            chunks.append("\n\n".join(buffer))
+            buffer = [p]
+            buffer_len = plen
+        else:
+            buffer.append(p)
+            buffer_len += plen
+        if len(chunks) >= MAX_CHUNKS:
+            break
+    if buffer and len(chunks) < MAX_CHUNKS:
+        chunks.append("\n\n".join(buffer))
+    return chunks
+
 
 async def extract_promises_from_text(
     text: str,
     document_date: str | None = None,
 ) -> list[dict]:
-    llm = get_llm()
-    user_content = text[:8000]
-    if document_date:
-        user_content = f"Дата документа: {document_date}\n\n{user_content}"
-
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    raw = response.content[0].text.strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        import re
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+    chunks = _chunk_text(text)
+    if not chunks:
         return []
+
+    all_promises: list[dict] = []
+    for i, chunk in enumerate(chunks):
+        user_content = chunk
+        if document_date and i == 0:
+            user_content = f"Дата документа: {document_date}\n\n{chunk}"
+        try:
+            raw = await call_llm(
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_content}],
+                max_tokens=4096,
+            )
+        except Exception as e:
+            logger.error("promises chunk %d/%d failed: %s", i + 1, len(chunks), e)
+            continue
+        all_promises.extend(_parse_json_array(raw, f"chunk{i}"))
+
+    # Дедуплицируем по нормализованной формулировке
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for p in all_promises:
+        if not isinstance(p, dict) or not p.get("text"):
+            continue
+        key = (p.get("normalized_text") or p["text"]).lower().strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(p)
+    return deduped
 
 
 async def extract_and_save_promises(
@@ -74,8 +133,6 @@ async def extract_and_save_promises(
 
     rows = []
     for p in promises:
-        if not isinstance(p, dict) or not p.get("text"):
-            continue
         rows.append({
             "id": str(uuid.uuid4()),
             "text": p["text"],

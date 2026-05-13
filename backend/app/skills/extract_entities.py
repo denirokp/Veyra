@@ -1,15 +1,18 @@
-"""Skill: extract_entities — извлечение сущностей из документа через LLM."""
+"""Skill: extract_entities — извлечение сущностей с чанкингом и логированием."""
 from __future__ import annotations
 
 import json
+import logging
+import re
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
-from app.settings import settings
-from app.storage.sql_db import save_entities
+from app.clients import call_llm
 from app.skills.find_contradictions import check_and_save_contradictions
+from app.storage.sql_db import save_entities
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """\
 Ты аналитик данных. Извлеки из текста все структурированные сущности.
@@ -44,25 +47,86 @@ SYSTEM_PROMPT = """\
 Ответь ТОЛЬКО JSON массивом, без markdown обёртки.\
 """
 
+CHUNK_SIZE = 6000  # символов на один LLM-вызов
+MAX_CHUNKS = 8     # верхняя граница — не более 48k символов суммарно (~12 стр)
 
-async def extract_entities_from_text(text: str) -> list[dict]:
-    llm = get_llm()
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=4096,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": text[:8000]}],  # обрезаем длинные тексты
-    )
-    raw = response.content[0].text.strip()
+
+def _parse_json_array(raw: str, source_label: str) -> list[dict]:
     try:
-        return json.loads(raw)
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+        logger.warning("entities/%s: ожидался JSON array, получено %s", source_label, type(data).__name__)
+        return []
     except json.JSONDecodeError:
-        # Попытка вытащить JSON из текста
-        import re
         match = re.search(r"\[.*\]", raw, re.DOTALL)
         if match:
-            return json.loads(match.group())
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError as e:
+                logger.warning("entities/%s: regex-fallback не распарсился: %s | head=%r",
+                               source_label, e, raw[:200])
+                return []
+        logger.warning("entities/%s: невалидный JSON, [] | head=%r", source_label, raw[:200])
         return []
+
+
+def _chunk_text(text: str) -> list[str]:
+    """Режем по абзацам, чтобы не разрывать предложения. Каждый кусок ≤ CHUNK_SIZE."""
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    buffer: list[str] = []
+    buffer_len = 0
+    for p in paragraphs:
+        plen = len(p) + 2
+        if buffer_len + plen > CHUNK_SIZE and buffer:
+            chunks.append("\n\n".join(buffer))
+            buffer = [p]
+            buffer_len = plen
+        else:
+            buffer.append(p)
+            buffer_len += plen
+        if len(chunks) >= MAX_CHUNKS:
+            break
+    if buffer and len(chunks) < MAX_CHUNKS:
+        chunks.append("\n\n".join(buffer))
+    return chunks
+
+
+async def extract_entities_from_text(text: str) -> list[dict]:
+    chunks = _chunk_text(text)
+    if not chunks:
+        return []
+
+    all_entities: list[dict] = []
+    for i, chunk in enumerate(chunks):
+        try:
+            raw = await call_llm(
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": chunk}],
+                max_tokens=4096,
+            )
+        except Exception as e:
+            logger.error("entities chunk %d/%d failed: %s", i + 1, len(chunks), e)
+            continue
+        all_entities.extend(_parse_json_array(raw, f"chunk{i}"))
+
+    # Дедуплицируем по (type, normalized_name, value)
+    seen: set[tuple] = set()
+    deduped: list[dict] = []
+    for e in all_entities:
+        if not isinstance(e, dict) or not e.get("name"):
+            continue
+        key = (
+            e.get("type", "other"),
+            (e.get("normalized_name") or e["name"]).lower().strip(),
+            str(e.get("value") or "").strip(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(e)
+    return deduped
 
 
 async def extract_and_save(
@@ -75,8 +139,6 @@ async def extract_and_save(
 
     rows = []
     for e in entities:
-        if not isinstance(e, dict) or not e.get("name"):
-            continue
         rows.append({
             "id": str(uuid.uuid4()),
             "type": e.get("type", "other"),
@@ -92,7 +154,6 @@ async def extract_and_save(
 
     await save_entities(db, rows)
 
-    # Проверяем числовые расхождения с уже существующими метриками
     metrics = [r for r in rows if r["type"] == "metric"]
     if metrics:
         await check_and_save_contradictions(metrics, document_id, db)

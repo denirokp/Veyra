@@ -6,9 +6,12 @@ import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import get_llm
-from app.settings import settings
+import logging
+
+from app.clients import call_llm
 from app.storage.sql_db import Chunk, Document
+
+logger = logging.getLogger(__name__)
 
 EXTRACT_TOPICS_PROMPT = """\
 Извлеки 5-15 ключевых тем и направлений из текста.
@@ -43,17 +46,19 @@ async def _extract_topics_from_chunks(chunks: list[str]) -> list[str]:
     if not chunks:
         return []
     combined = "\n\n---\n\n".join(chunks[:20])[:6000]
-    llm = get_llm()
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=1024,
-        system=EXTRACT_TOPICS_PROMPT,
-        messages=[{"role": "user", "content": combined}],
-    )
-    raw = response.content[0].text.strip()
+    try:
+        raw = await call_llm(
+            system=EXTRACT_TOPICS_PROMPT,
+            messages=[{"role": "user", "content": combined}],
+            max_tokens=1024,
+        )
+    except Exception as e:
+        logger.error("find_gaps/topics: LLM call failed: %s", e)
+        return []
     try:
         return json.loads(raw)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning("find_gaps/topics: невалидный JSON: %s | head=%r", e, raw[:200])
         return []
 
 
@@ -94,23 +99,24 @@ async def find_gaps(db: AsyncSession) -> list[dict]:
     if not all_topics:
         return []
 
-    llm = get_llm()
     user_content = (
         f"ВСЕ ДОКУМЕНТЫ (все темы):\n{json.dumps(all_topics, ensure_ascii=False)}\n\n"
         f"СТРАТЕГИЯ (темы из стратегических документов):\n"
         f"{json.dumps(strategy_topics, ensure_ascii=False)}"
     )
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=2048,
-        system=GAP_ANALYSIS_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
-    )
-    raw = response.content[0].text.strip()
+    try:
+        raw = await call_llm(
+            system=GAP_ANALYSIS_PROMPT,
+            messages=[{"role": "user", "content": user_content}],
+            max_tokens=2048,
+        )
+    except Exception as e:
+        logger.error("find_gaps/analysis: LLM call failed: %s", e)
+        return []
     try:
         gaps = json.loads(raw)
-        # Сортируем: high → medium → low
         priority_order = {"high": 0, "medium": 1, "low": 2}
         return sorted(gaps, key=lambda g: priority_order.get(g.get("priority", "low"), 2))
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.warning("find_gaps/analysis: невалидный JSON: %s | head=%r", e, raw[:200])
         return []

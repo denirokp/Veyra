@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 import base64
+import logging
 import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents import docs as docs_agent
-from app.clients import get_llm
-from app.settings import settings
+from app.clients import call_llm
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
 
@@ -35,16 +37,14 @@ _MODE_CLASSIFIER_PROMPT = """\
 
 async def detect_mode(message: str) -> ChatMode:
     try:
-        llm = get_llm()
-        response = await llm.messages.create(
-            model=settings.LLM_MODEL,
-            max_tokens=10,
+        raw = await call_llm(
             system=_MODE_CLASSIFIER_PROMPT,
             messages=[{"role": "user", "content": message}],
+            max_tokens=10,
         )
-        mode_str = response.content[0].text.strip().lower()
-        return ChatMode(mode_str)
-    except Exception:
+        return ChatMode(raw.strip().lower())
+    except Exception as e:
+        logger.warning("detect_mode fallback to search: %s", e)
         return ChatMode.search
 
 
