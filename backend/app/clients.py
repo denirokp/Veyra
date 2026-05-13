@@ -35,7 +35,11 @@ def get_embedder():
     if _embedder is None:
         from sentence_transformers import SentenceTransformer
         logger.info("Загружаю embedding-модель: %s", settings.EMBEDDING_MODEL)
-        _embedder = SentenceTransformer(settings.EMBEDDING_MODEL)
+        _embedder = SentenceTransformer(
+            settings.EMBEDDING_MODEL,
+            device="cpu",
+            model_kwargs={"low_cpu_mem_usage": False},
+        )
         logger.info("Embedding-модель загружена, dim=%d", _embedder.get_sentence_embedding_dimension())
     return _embedder
 
