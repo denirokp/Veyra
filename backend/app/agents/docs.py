@@ -323,7 +323,42 @@ async def run(
     # чтобы LLM мог достать конкретные числа и атрибуцию.
     include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
     top_k = 30 if mode == ChatMode.full else 15
-    chunks = await retrieve(message, top_k=top_k, include_archive=include_archive)
+
+    # Для full-режима пытаемся декомпозировать составной запрос — если он
+    # реально составной, пройдёмся retrieval'ом по каждому под-вопросу и
+    # объединим результаты. Это даёт более полное покрытие на запросах
+    # вида "сначала X, потом Y, потом план".
+    chunks = []
+    sub_queries: list[str] = []
+    if mode == ChatMode.full and len(message) > 80:
+        try:
+            from app.skills.query_planner import decompose
+            sub_queries = await decompose(message)
+        except Exception as exc:
+            logger.warning("query_planner failed (skipping): %s", exc)
+            sub_queries = []
+
+    if sub_queries:
+        # По каждому под-запросу берём меньше top_k, итог дедуплицируется по id
+        per_sub = max(8, top_k // max(1, len(sub_queries)))
+        seen_ids: set[str] = set()
+        merged: list = []
+        for sq in [message] + sub_queries:
+            try:
+                sub_chunks = await retrieve(sq, top_k=per_sub, include_archive=include_archive)
+            except Exception as exc:
+                logger.warning("retrieve failed for sub-query: %s", exc)
+                continue
+            for c in sub_chunks:
+                if c.id in seen_ids:
+                    continue
+                seen_ids.add(c.id)
+                merged.append(c)
+        chunks = merged[:top_k + 10]  # небольшой запас на дедуп
+        logger.info("planner-retrieval: %d sub-queries → %d unique chunks",
+                    len(sub_queries), len(chunks))
+    else:
+        chunks = await retrieve(message, top_k=top_k, include_archive=include_archive)
 
     # Document-level контекст для full mode имеет 3 стратегии в зависимости
     # от размера корпуса:
