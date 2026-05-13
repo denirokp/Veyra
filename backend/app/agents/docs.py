@@ -128,10 +128,24 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
         "В hypotheses — рыночный контекст и аналоги."
     ),
     ChatMode.research: (
-        "Собери всё что есть в документах по теме включая архивные. "
-        "Дополни рыночным контекстом — конкуренты, тренды, как делают другие "
-        "(это твои знания, помечай как hypotheses с disclaimer). "
-        "Ищи паттерны, повторяющиеся проблемы."
+        "Это режим РЫНОЧНОГО ИССЛЕДОВАНИЯ. Главное — внешний контекст, "
+        "конкуренты, тренды, индустриальные benchmarks.\n\n"
+        "ПРИОРИТЕТ ИСТОЧНИКОВ:\n"
+        "1. ВНЕШНИЙ КОНТЕКСТ из интернета (блок WEB-ИСТОЧНИКОВ если есть) — "
+        "основа ответа. Цитируй конкретные продукты/компании/цифры/URL'ы.\n"
+        "2. ТВОИ ЗНАНИЯ из pretrain — если веб-блока нет или мало.\n"
+        "3. Документы команды — для привязки «как наши данные соотносятся "
+        "с рынком».\n\n"
+        "Что должно быть в ответе:\n"
+        "- answer: 4-6 предложений сводка по теме рынка\n"
+        "- facts: цитаты из ВНУТРЕННИХ документов с source_id\n"
+        "- hypotheses: КОНКРЕТНЫЕ внешние находки — продукты (Ozon University, "
+        "Pendo, Appcues...), компании (Amazon, Wildberries, Shopify), цифры "
+        "(«в среднем 20% completion onboarding в SaaS»). Каждый пункт начинай "
+        "с названия продукта/компании. Если есть web-источник — упомяни URL "
+        "в скобках.\n"
+        "- requires_verification: что нужно подтвердить локальными данными\n\n"
+        "Не лей воды. Конкретные имена, цифры, цитаты."
     ),
     ChatMode.full: (
         "Сделай ГЛУБОКИЙ РЕСЁРЧ-ОТЧЁТ. Пользователь ждёт не список цитат, "
@@ -584,12 +598,16 @@ async def run(
         knowledge_section = ""
 
     # Web search — для full mode если запрос требует «внешнего опыта» И
-    # настроен один из API-ключей (Tavily/Brave). Тихо пропускается иначе.
+    # Web search — для full / research режимов когда запрос требует
+    # «внешнего опыта» И настроен один из API-ключей (Tavily/Brave).
+    # research — это буквально режим про внешний контекст, ему web-поиск нужен.
     web_section = ""
-    if mode == ChatMode.full:
+    if mode in (ChatMode.full, ChatMode.research):
         try:
             from app.skills.web_research import should_do_web_search, do_research
-            if should_do_web_search(message):
+            # research mode не требует триггерных слов — он сам по себе про внешнее
+            wants_web = (mode == ChatMode.research) or should_do_web_search(message)
+            if wants_web:
                 web_block = await do_research(message, max_results=5)
                 if web_block:
                     web_section = "\n\n" + web_block + "\n"
