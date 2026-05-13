@@ -274,16 +274,17 @@ async def run(
     top_k = 30 if mode == ChatMode.full else 15
     chunks = await retrieve(message, top_k=top_k, include_archive=include_archive)
 
-    # Document-level контекст: для full режима подгружаем ПОЛНЫЕ ТЕКСТЫ всех
-    # актуальных документов, если они влезают в контекст модели. Иначе
-    # fallback на брифы (компактные структурированные саммари).
-    # Цель — дать LLM полную картину без потерь от чанкинга.
+    # Document-level контекст для full mode имеет 3 стратегии в зависимости
+    # от размера корпуса:
+    #   1) корпус влезает целиком (≤120K chars) → ПОЛНЫЕ ТЕКСТЫ
+    #   2) средний (≤30 доков, не помещается) → ОБЗОРЫ (briefs)
+    #   3) большой (>30 доков или брифов > 100K chars) → deep_research:
+    #      router выбирает топ-N, потом iterative refinement по их полным
+    #      текстам, потом synthesis. Возвращаем результат deep_research как
+    #      финальный ответ, минуя обычный LLM-вызов в этой функции.
     doc_briefs_block = ""
     full_texts_block = ""
     if mode == ChatMode.full and db is not None:
-        # Бюджет контекста: moonshot-v1-128k = 128K tokens ≈ 500K chars input,
-        # из них выделяем ~100K chars на полные тексты, остальное — на чанки,
-        # entity-блок, system prompt, ответ.
         FULL_TEXTS_BUDGET = 120_000
 
         from app.storage.sql_db import (
@@ -292,23 +293,85 @@ async def run(
         )
         full_texts = await get_all_document_full_texts(db, statuses=["actual"], limit=20)
         total = sum(len(t) for _, t in full_texts)
-        if full_texts and total <= FULL_TEXTS_BUDGET:
+        n_docs = len(full_texts)
+
+        # Стратегия 1: всё влезает — даём полные тексты LLM напрямую
+        if full_texts and total <= FULL_TEXTS_BUDGET and n_docs <= 20:
             parts = [
                 f"=== ПОЛНЫЙ ТЕКСТ: {doc.title} (L{doc.hierarchy_level or 5}, {doc.status}) ===\n{text}"
                 for doc, text in full_texts
             ]
             full_texts_block = "\n\n".join(parts)
-            logger.info("full-mode: using %d full texts (%d chars total)",
-                        len(full_texts), total)
+            logger.info("full-mode: using %d full texts (%d chars total)", n_docs, total)
         else:
-            # Корпус не влезает — fallback на брифы
-            briefs = await get_all_document_briefs(db, statuses=["actual"], limit=30)
+            # Стратегия 2 vs 3: проверяем сколько brief'ов есть
+            briefs = await get_all_document_briefs(db, statuses=["actual"], limit=500)
+            briefs_total = sum(len(b) for _, b in briefs)
+
+            # Стратегия 3: корпус большой — переходим в deep_research
+            DEEP_DOC_THRESHOLD = 20
+            if len(briefs) > DEEP_DOC_THRESHOLD or briefs_total > 100_000:
+                from app.skills.deep_research import run_deep_research
+                logger.info("full-mode: switching to deep_research (%d docs, %d brief chars)",
+                            len(briefs), briefs_total)
+                context_chunks = _build_context(chunks)
+                deep_result = await run_deep_research(
+                    query=message,
+                    db=db,
+                    chunks_context=context_chunks,
+                    max_docs=10,
+                )
+                # Превратим plain dict в FactItem'ы используя index_map
+                facts: list[FactItem] = []
+                index_map: dict[int, RetrievedChunk] = {i + 1: c for i, c in enumerate(chunks)}
+                for f in deep_result.get("facts", []):
+                    if not isinstance(f, dict) or not f.get("statement"):
+                        continue
+                    try:
+                        source_num = int(f.get("source_id", 0))
+                    except (TypeError, ValueError):
+                        source_num = 0
+                    chunk = index_map.get(source_num)
+                    from uuid import UUID as _UUID
+                    if chunk:
+                        doc_row = await get_document(db, chunk.document_id)
+                        try:
+                            doc_uuid = _UUID(str(chunk.document_id))
+                        except (TypeError, ValueError):
+                            doc_uuid = _UUID("00000000-0000-0000-0000-000000000000")
+                        source = SourceRef(
+                            document_id=doc_uuid,
+                            title=doc_row.title if doc_row else (chunk.title or chunk.document_id),
+                            status=chunk.status,  # type: ignore[arg-type]
+                            hierarchy_level=chunk.hierarchy_level,
+                            section=chunk.section or None,
+                            confluence_url=doc_row.confluence_url if doc_row else None,
+                        )
+                    else:
+                        source = SourceRef(
+                            document_id=_UUID("00000000-0000-0000-0000-000000000000"),
+                            title="Источник не определён",
+                            status="unknown",  # type: ignore[arg-type]
+                            hierarchy_level=5,
+                        )
+                    facts.append(FactItem(statement=f["statement"], source=source))
+
+                return {
+                    "answer": deep_result.get("answer", ""),
+                    "facts": facts,
+                    "hypotheses": deep_result.get("hypotheses", []) or [],
+                    "warnings": deep_result.get("warnings", []) or [],
+                    "requires_verification": deep_result.get("requires_verification", []) or [],
+                    "agents_used": ["docs", "deep_research"],
+                }
+
+            # Стратегия 2: брифы влезают, тексты — нет
             if briefs:
                 parts = [f"=== ОБЗОР ДОКУМЕНТА: {doc.title} (L{doc.hierarchy_level or 5}) ===\n{brief}"
                          for doc, brief in briefs]
                 doc_briefs_block = "\n\n".join(parts)
-                logger.info("full-mode: corpus too big (%d chars), fell back to %d briefs",
-                            total, len(briefs))
+                logger.info("full-mode: corpus too big (%d full chars), using %d briefs (%d chars)",
+                            total, len(briefs), briefs_total)
 
     # Entity memory — обогащаем контекст релевантными сущностями
     entity_block = ""
