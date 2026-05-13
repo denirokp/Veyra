@@ -204,6 +204,18 @@ async def run_initiative_review(
             "recommendation": {"verdict": "needs_work", "reasoning": raw[:500] or "LLM не ответил"},
         }
 
+    # Обогащаем strategic_anchors реальными doc_id из retrieve chunks —
+    # сопоставляем по title чтобы фронт мог открыть конкретный документ.
+    title_to_chunk = {c.title: c for c in chunks if getattr(c, "title", None)}
+    for anchor in result.get("strategic_anchors", []) or []:
+        if not isinstance(anchor, dict):
+            continue
+        c = title_to_chunk.get(anchor.get("title", ""))
+        if c:
+            anchor.setdefault("document_id", c.document_id)
+            anchor.setdefault("status", c.status)
+            anchor.setdefault("hierarchy_level", c.hierarchy_level)
+
     return {
         **result,
         "market_context": market_ctx,

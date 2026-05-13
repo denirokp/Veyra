@@ -142,6 +142,30 @@ async def detect_intent(message: str, history) -> Intent:
             if style_raw == "short":
                 style_raw = DEFAULT_STYLE
 
+    # Follow-up короткий — переопределяем стиль на short. «А что насчёт X?»,
+    # «уточни», «подробнее» после большого отчёта не должны генерить ещё один
+    # большой отчёт.
+    msg_norm = message.strip()
+    if history and msg_norm and len(msg_norm) < 80:
+        last_assistant = next(
+            (m for m in reversed(history) if m.role == "assistant"),
+            None,
+        )
+        followup_markers = (
+            "а ", "и ", "также", "уточни", "подробнее", "детальнее",
+            "что насчёт", "что насчет", "почему", "когда", "сколько",
+            "теперь", "далее",
+        )
+        starts_followup = any(msg_norm.lower().startswith(t) for t in followup_markers)
+        if last_assistant and (starts_followup or len(msg_norm) < 40):
+            if mode == ChatMode.full:
+                # Не делаем full-отчёт на «а что насчёт X?» — это search
+                mode = ChatMode.search
+            if style_raw == "report":
+                style_raw = "short"
+            logger.info("detect_intent: follow-up shortcut → mode=%s, style=%s",
+                        mode.value, style_raw)
+
     return Intent(mode=mode, style=style_raw)
 
 
@@ -166,15 +190,23 @@ async def _run_validate(message: str, db: AsyncSession) -> dict:
     verdict_ru = {"approve": "Одобрить", "needs_work": "Требует доработки", "reject": "Отклонить"}
     answer = f"**{verdict_ru.get(verdict, verdict)}**: {reasoning}"
 
+    # initiative_review.strategic_anchors содержит реальные doc_id из RAG
+    # — используем их, чтобы факты были кликабельны и привязаны к нужному
+    # документу, а не к синтетическому nil-UUID.
     facts: list[FactItem] = []
     for anchor in review.get("strategic_anchors", [])[:5]:
+        anchor_doc_id = anchor.get("document_id", "")
+        try:
+            doc_uuid = UUID(str(anchor_doc_id))
+        except (TypeError, ValueError):
+            doc_uuid = UUID("00000000-0000-0000-0000-000000000000")
         facts.append(FactItem(
             statement=f"{anchor['title']}: {anchor['relevance']}",
             source=SourceRef(
-                document_id=UUID("00000000-0000-0000-0000-000000000000"),
+                document_id=doc_uuid,
                 title=anchor["title"],
-                status="actual",  # type: ignore[arg-type]
-                hierarchy_level=2,
+                status=anchor.get("status", "actual"),  # type: ignore[arg-type]
+                hierarchy_level=int(anchor.get("hierarchy_level", 2)),
             ),
         ))
 

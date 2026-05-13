@@ -462,7 +462,14 @@ async def run(
     # вида "сначала X, потом Y, потом план".
     chunks = []
     sub_queries: list[str] = []
-    if mode == ChatMode.full and len(message) > 80:
+    # query_planner полезен на любом синтетическом mode + длинном запросе,
+    # а не только full. search/research тоже выигрывают от мульти-извлечения.
+    msg_lc = message.lower()
+    multi_signals = (
+        len(message) > 100
+        or any(t in msg_lc for t in (" и ", " а также ", " затем ", " потом ", " также ", "сначала"))
+    )
+    if mode in (ChatMode.full, ChatMode.search, ChatMode.research) and multi_signals:
         try:
             from app.skills.query_planner import decompose
             sub_queries = await decompose(message)
@@ -627,16 +634,34 @@ async def run(
     # research → multi-query (3-5 целевых поисков по компаниям/концептам).
     # full → single-query (контекста из документов и так много).
     web_section = ""
+    web_warning: str | None = None  # покажем юзеру если поиск был нужен но не вышел
     if mode in (ChatMode.full, ChatMode.research):
+        from app.settings import settings as _settings
+        web_keys_configured = bool(_settings.TAVILY_API_KEY or _settings.BRAVE_API_KEY)
         try:
             from app.skills.web_research import (
                 should_do_web_search, do_research, do_research_multi,
             )
             if mode == ChatMode.research:
-                # research всегда вызывает web-поиск + multi-query для глубины
-                web_block = await do_research_multi(message, max_results_per_query=10)
+                if not web_keys_configured:
+                    web_warning = (
+                        "⚠️ Режим «Рынок» работает без подключённого web-поиска "
+                        "(нет TAVILY_API_KEY / BRAVE_API_KEY в .env). "
+                        "Используются только знания LLM из pretrain."
+                    )
+                    web_block = ""
+                else:
+                    web_block = await do_research_multi(message, max_results_per_query=10)
+                    if not web_block:
+                        web_warning = (
+                            "⚠️ Внешний поиск не вернул результатов. "
+                            "Возможно квота исчерпана или сеть недоступна."
+                        )
             elif should_do_web_search(message):
-                web_block = await do_research(message, max_results=5)
+                if web_keys_configured:
+                    web_block = await do_research(message, max_results=5)
+                else:
+                    web_block = ""
             else:
                 web_block = ""
             if web_block:
@@ -644,6 +669,7 @@ async def run(
                 logger.info("web_research: injected %d chars", len(web_block))
         except Exception as exc:
             logger.warning("web_research error (skipping): %s", exc)
+            web_warning = f"⚠️ Веб-поиск не сработал: {exc}"
 
     # История диалога — для follow-up'ов и местоимений
     history_section = ""
@@ -793,6 +819,10 @@ async def run(
                                 "%d → %d, would degrade)", valid_before, valid_after)
         except Exception as exc:
             logger.warning("self_check pipeline error (skipping): %s", exc)
+
+    # Предупреждение если web-поиск был ожидаем но не вышел
+    if web_warning:
+        warnings.append(web_warning)
 
     # Предупреждение если нет чанков
     if not chunks:
