@@ -34,11 +34,16 @@ def upsert_chunks(
     collection_name: str = "actual",
 ) -> None:
     col = get_collection(collection_name)
+    # Chroma не принимает None в metadata — выкидываем
+    metadatas = [
+        {k: v for k, v in c["metadata"].items() if v is not None}
+        for c in chunks
+    ]
     col.upsert(
         ids=[c["id"] for c in chunks],
         embeddings=[c["embedding"] for c in chunks],
         documents=[c["content"] for c in chunks],
-        metadatas=[c["metadata"] for c in chunks],
+        metadatas=metadatas,
     )
 
 
