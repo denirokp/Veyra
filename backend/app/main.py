@@ -7,6 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import chat, contradictions, docs, documents, initiative, metrics, promises
 from app.storage.sql_db import init_db, mark_overdue_promises, AsyncSession, engine
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
