@@ -316,6 +316,8 @@ async def run(
     mode: ChatMode,
     file_content: str | None = None,
     db: AsyncSession | None = None,
+    history=None,
+    style: str = "report",
 ) -> dict:
     # Поиск релевантных чанков — для full режима берём больше материала,
     # чтобы LLM мог достать конкретные числа и атрибуцию.
@@ -452,9 +454,36 @@ async def run(
     else:
         knowledge_section = ""
 
+    # История диалога — для follow-up'ов и местоимений
+    history_section = ""
+    if history:
+        lines = []
+        for m in list(history)[-6:]:
+            role = "User" if m.role == "user" else "Assistant"
+            content = (m.content or "").strip()
+            if len(content) > 600:
+                content = content[:600] + "..."
+            lines.append(f"[{role}] {content}")
+        if lines:
+            history_section = (
+                "\n\nИСТОРИЯ ДИАЛОГА (последние сообщения, используй для понимания "
+                "контекста и follow-up вопросов):\n" + "\n".join(lines) + "\n"
+            )
+
+    # Подсказка по стилю — поверх mode_instruction
+    style_hint = {
+        "report": "Стиль: длинный markdown-отчёт с разделами H2.",
+        "list": "Стиль: компактный список с подзаголовками H3 для группировки.",
+        "short": "Стиль: короткий ответ 1-3 абзаца. Без длинных разделов.",
+        "plan": "Стиль: пошаговый план — пронумерованный список шагов с описанием.",
+        "qa": "Стиль: формат «Вопрос — Ответ» с короткими блоками.",
+    }.get(style, "")
+
     user_message = (
         f"Режим: {mode.value}\n"
         f"Инструкция: {mode_instruction}\n"
+        + (f"{style_hint}\n" if style_hint else "")
+        + history_section
         + knowledge_section
         + f"\nФРАГМЕНТЫ ДОКУМЕНТОВ (для точных цитат с source_id):\n{context}"
         + (f"\n\n{entity_block}" if entity_block else "")

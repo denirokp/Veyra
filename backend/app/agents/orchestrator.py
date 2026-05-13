@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import base64
+import json
 import logging
+import re
 import time
+import uuid as _uuid
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,41 +19,56 @@ logger = logging.getLogger(__name__)
 
 from app.models.schemas import ChatMode, ChatRequest, ChatResponse, FactItem, SourceRef
 
-_MODE_CLASSIFIER_PROMPT = """\
-Определи режим обработки запроса пользователя к корпоративной базе знаний.
 
-Режимы:
-- search: точечный поиск конкретного факта в документах \
-(«что мы знаем про X», «когда запустили Y», «сколько у нас Z»)
-- contradictions: пользователь ищет расхождения, конфликты или несоответствия в данных \
-(«две разные цифры», «не сходится», «кто прав», «разные версии», «противоречие»)
-- promises: пользователь спрашивает о планах, обещаниях, дедлайнах, что должно быть сделано \
-(«что планировали», «P0-задачи», «дедлайны», «что обещали», «что не сделали»)
-- gaps: пользователь ищет пробелы, слепые пятна, что упущено или не учтено \
-(«что не учли», «чего не хватает», «что пропустили», «какие риски не закрыты»)
-- write: пользователь просит написать или подготовить документ, тезисы, записку, абзац \
-(«напиши», «составь», «подготовь»)
-- validate: пользователь просит оценить чью-то инициативу/идею/предложение целиком \
-(«оцени», «стоит ли», «что думаешь об инициативе», «проверь идею»)
-- research: пользователь спрашивает о конкурентах, рынке, внешнем контексте \
-(«как делают другие», «best practices», «опыт из вне», «бенчмарк»)
-- full: пользователь хочет ПОЛНЫЙ разбор или СИНТЕЗ ИЗ НЕСКОЛЬКИХ ИСТОЧНИКОВ или \
-просит ПРАКТИЧЕСКИЙ СОВЕТ/ПЛАН на основе данных \
-(«разбери всё», «дай полный анализ», «комплексно по теме», «расскажи всё», \
-«как выстроить», «как улучшить», «как мы можем», «помоги построить», \
-«какой подход выбрать», «исходя из X и Y предложи», «опираясь на ... возьми ещё ...»)
+# Поддерживаемые стили вывода. Влияют на тон и формат answer, не на pipeline.
+OUTPUT_STYLES = ("report", "list", "short", "plan", "qa")
+DEFAULT_STYLE = "report"
 
-ВАЖНО: если запрос требует ОДНОВРЕМЕННО (а) данных из документов и (б) рекомендаций/плана \
-ИЛИ комбинирует несколько источников — выбирай full, а не search.
 
-Ответь ОДНИМ словом — именем режима. Без пояснений.\
+@dataclass
+class Intent:
+    mode: ChatMode
+    style: str  # report | list | short | plan | qa
+
+
+_CLASSIFIER_PROMPT = """\
+Ты — диспетчер запросов к корпоративной базе знаний. На входе:
+- ПОСЛЕДНИЕ СООБЩЕНИЯ из диалога (могут быть пустыми если новый чат)
+- ТЕКУЩИЙ ЗАПРОС пользователя
+
+Твоя задача — определить (1) РЕЖИМ и (2) СТИЛЬ ответа.
+
+РЕЖИМЫ:
+- search: точечный поиск конкретного факта («что мы знаем про X», «когда запустили Y»)
+- contradictions: расхождения, конфликты в данных
+- promises: планы, дедлайны, что обещали
+- gaps: что упущено, серые зоны, риски не закрытые
+- write: создание текста («напиши», «составь», «подготовь черновик»)
+- validate: оценка инициативы/идеи целиком («оцени», «проверь идею»)
+- research: конкуренты, рынок, бенчмарки, best practices
+- full: полный разбор / синтез из нескольких источников / совет+план на основе данных
+
+СТИЛИ:
+- report: длинный markdown-отчёт с секциями (для глубокого анализа)
+- list: структурированный список с подзаголовками (для обзоров и описей)
+- short: короткий ответ 1-3 абзаца (для конкретных вопросов)
+- plan: пошаговый план/чеклист (для actionable задач)
+- qa: формат «вопрос-ответ» (для пояснений и FAQ-стиля)
+
+Используй контекст диалога:
+- если запрос продолжает обсуждение («теперь напиши план», «уточни X», «а что насчёт Y») — \
+учитывай предыдущую тему
+- короткие follow-up'ы обычно требуют короткого стиля (short/list/plan)
+- свежий запрос про синтез нескольких документов → full+report
+- "напиши план" после анализа → write+plan
+- "уточни" / "а что про X" → search+short
+
+Ответь СТРОГО JSON: {"mode": "<режим>", "style": "<стиль>"}.
+Без markdown, без объяснений.\
 """
 
 
-# Триггеры на которые мы апгрейдим mode до full (синтез + рекомендация).
-# LLM-классификатор иногда ставит "search" даже на явно синтетические вопросы
-# («как выстроить онбординг исходя из X и опыта Y»), для которых search-режим
-# даёт слабый ответ.
+# Триггеры эвристического upgrade search → full (синтез + рекомендация)
 _ADVISORY_TRIGGERS = (
     "как выстро", "как улучш", "как мы можем", "как нам", "как сделать",
     "помоги построить", "помоги составить", "помоги разработать",
@@ -59,28 +78,71 @@ _ADVISORY_TRIGGERS = (
 )
 
 
-async def detect_mode(message: str) -> ChatMode:
+def _format_history(messages) -> str:
+    """Форматирует историю в компактный текстовый блок для промпта."""
+    if not messages:
+        return "(новый диалог, истории нет)"
+    parts = []
+    for m in messages:
+        role = "User" if m.role == "user" else "Assistant"
+        # Обрезаем длинные ответы — для классификатора важна тема, не объём
+        snippet = (m.content or "").strip()
+        if len(snippet) > 400:
+            snippet = snippet[:400] + "..."
+        parts.append(f"[{role}] {snippet}")
+    return "\n".join(parts)
+
+
+async def detect_intent(message: str, history) -> Intent:
+    """Определяет (mode, style) по запросу + последним сообщениям диалога."""
+    user_msg = (
+        f"=== Последние сообщения диалога ===\n{_format_history(history)}\n\n"
+        f"=== Текущий запрос ===\n{message}"
+    )
     try:
         raw = await call_llm(
-            system=_MODE_CLASSIFIER_PROMPT,
-            messages=[{"role": "user", "content": message}],
-            max_tokens=10,
+            system=_CLASSIFIER_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+            max_tokens=80,
         )
-        mode = ChatMode(raw.strip().lower())
     except Exception as e:
-        logger.warning("detect_mode fallback to search: %s", e)
-        return ChatMode.search
+        logger.warning("detect_intent failed, falling back to search/report: %s", e)
+        return Intent(mode=ChatMode.search, style=DEFAULT_STYLE)
 
-    # Эвристический upgrade: если классификатор выбрал search, но запрос
-    # содержит «как выстроить / помоги составить / опираясь на ...» —
-    # это синтез + рекомендация, а не точечный поиск. Поднимаем до full.
+    raw = raw.strip()
+    parsed = None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+    if not isinstance(parsed, dict):
+        logger.warning("detect_intent: cant parse %r, fallback", raw[:100])
+        return Intent(mode=ChatMode.search, style=DEFAULT_STYLE)
+
+    mode_raw = (parsed.get("mode") or "").strip().lower()
+    style_raw = (parsed.get("style") or DEFAULT_STYLE).strip().lower()
+    try:
+        mode = ChatMode(mode_raw)
+    except ValueError:
+        mode = ChatMode.search
+    if style_raw not in OUTPUT_STYLES:
+        style_raw = DEFAULT_STYLE
+
+    # Эвристический upgrade search → full на advisory-вопросах
     if mode == ChatMode.search:
         msg_lc = message.lower()
         if any(t in msg_lc for t in _ADVISORY_TRIGGERS):
-            logger.info("detect_mode: upgrading search → full (advisory query)")
-            return ChatMode.full
+            logger.info("detect_intent: upgrading search → full (advisory)")
+            mode = ChatMode.full
+            if style_raw == "short":
+                style_raw = DEFAULT_STYLE
 
-    return mode
+    return Intent(mode=mode, style=style_raw)
 
 
 def _decode_file(file_b64: str) -> str:
@@ -91,19 +153,16 @@ def _decode_file(file_b64: str) -> str:
 
 
 async def _run_validate(message: str, db: AsyncSession) -> dict:
-    """Роутит validate-запрос в initiative_review и формирует ChatResponse-совместимый dict."""
+    """Роутит validate-запрос в initiative_review."""
     from app.skills.initiative_review import run_initiative_review
 
-    # Первая строка = заголовок инициативы, остальное = текст
     lines = message.strip().splitlines()
     title = lines[0].strip() if lines else message[:80]
     body = "\n".join(lines[1:]).strip() if len(lines) > 1 else message
 
     review = await run_initiative_review(title, body, db)
-
     verdict = review.get("recommendation", {}).get("verdict", "needs_work")
     reasoning = review.get("recommendation", {}).get("reasoning", "")
-
     verdict_ru = {"approve": "Одобрить", "needs_work": "Требует доработки", "reject": "Отклонить"}
     answer = f"**{verdict_ru.get(verdict, verdict)}**: {reasoning}"
 
@@ -136,32 +195,84 @@ async def _run_validate(message: str, db: AsyncSession) -> dict:
 async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
     t0 = time.monotonic()
 
-    mode = request.mode or await detect_mode(request.message)
+    # 1. Загружаем последние сообщения этой сессии — для контекстной памяти
+    from app.storage.sql_db import get_recent_chat_messages, save_chat_message
+    session_id_str = str(request.session_id) if request.session_id else ""
+    history = await get_recent_chat_messages(db, session_id_str, limit=8) if session_id_str else []
+
+    # 2. Определяем (mode, style). Если пользователь явно указал mode — стиль
+    # подбираем сами; иначе классификатор выбирает оба.
+    if request.mode is not None:
+        # Юзер форсит режим через UI-пилюлю — стиль ставим дефолтный по моду
+        forced_mode = request.mode
+        forced_style = {
+            ChatMode.write: "plan",
+            ChatMode.search: "short",
+            ChatMode.full: "report",
+            ChatMode.validate: "report",
+            ChatMode.gaps: "list",
+            ChatMode.contradictions: "list",
+            ChatMode.promises: "list",
+            ChatMode.research: "report",
+        }.get(forced_mode, DEFAULT_STYLE)
+        intent = Intent(mode=forced_mode, style=forced_style)
+    else:
+        intent = await detect_intent(request.message, history)
+        logger.info("intent: mode=%s, style=%s", intent.mode.value, intent.style)
+
     file_content = _decode_file(request.file) if request.file else None
 
-    # validate → initiative_review
-    if mode == ChatMode.validate:
+    # 3. Маршрутизируем в нужный pipeline
+    if intent.mode == ChatMode.validate:
         result = await _run_validate(request.message, db)
     else:
         result = await docs_agent.run(
             message=request.message,
-            mode=mode,
+            mode=intent.mode,
             file_content=file_content,
             db=db,
+            history=history,
+            style=intent.style,
         )
 
     latency_ms = int((time.monotonic() - t0) * 1000)
 
-    return ChatResponse(
+    response = ChatResponse(
         answer=result["answer"],
         facts=result["facts"],
         hypotheses=result["hypotheses"],
         warnings=result["warnings"],
         requires_verification=result["requires_verification"],
         metadata={
-            "mode_detected": mode.value,
+            "mode_detected": intent.mode.value,
+            "style": intent.style,
             "agents_used": result.get("agents_used", ["docs"]),
             "latency_ms": latency_ms,
             "chunks_retrieved": result.get("chunks_used", 0),
         },
     )
+
+    # 4. Сохраняем оба сообщения в историю для будущих обращений
+    if session_id_str:
+        try:
+            await save_chat_message(
+                db,
+                message_id=str(_uuid.uuid4()),
+                session_id=session_id_str,
+                role="user",
+                content=request.message,
+            )
+            # Для assistant сохраняем JSON ответа (на случай отображения архива)
+            await save_chat_message(
+                db,
+                message_id=str(_uuid.uuid4()),
+                session_id=session_id_str,
+                role="assistant",
+                content=response.answer,
+                mode=intent.mode.value,
+                response_json=response.model_dump_json(),
+            )
+        except Exception as exc:
+            logger.warning("failed to persist chat messages: %s", exc)
+
+    return response

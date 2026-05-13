@@ -189,6 +189,22 @@ class StyleFeedback(Base):
     applied = Column(Boolean, default=False)
 
 
+class ChatMessage(Base):
+    """История чата по session_id — для контекстной памяти диалога.
+    Каждое сообщение хранит роль, текст и опциональный JSON-снапшот ответа.
+    LLM-классификатор и chat-агент видят последние N сообщений из той же
+    сессии, чтобы понимать «продолжи анализ», «теперь напиши план» и т.п."""
+    __tablename__ = "chat_messages"
+
+    id = Column(String, primary_key=True)
+    session_id = Column(String, index=True, nullable=False)
+    role = Column(String, nullable=False)  # user | assistant
+    content = Column(Text, nullable=False)
+    response_json = Column(Text)  # сериализованный ChatResponse (для assistant)
+    mode = Column(String)  # выбранный режим (для analytics/UI)
+    created_at = Column(DateTime, server_default=func.now(), index=True)
+
+
 def compute_hierarchy_level(
     status: str,
     is_anchor: bool,
@@ -270,6 +286,48 @@ async def get_all_document_briefs(
     result = await session.execute(q)
     docs = list(result.scalars().all())
     return [(d, d.brief) for d in docs if d.brief]
+
+
+async def save_chat_message(
+    session: AsyncSession,
+    *,
+    message_id: str,
+    session_id: str,
+    role: str,
+    content: str,
+    mode: str | None = None,
+    response_json: str | None = None,
+) -> None:
+    """Сохраняет одно сообщение в историю чата."""
+    session.add(ChatMessage(
+        id=message_id,
+        session_id=session_id,
+        role=role,
+        content=content,
+        mode=mode,
+        response_json=response_json,
+    ))
+    await session.commit()
+
+
+async def get_recent_chat_messages(
+    session: AsyncSession,
+    session_id: str,
+    limit: int = 8,
+) -> list[ChatMessage]:
+    """Возвращает последние N сообщений в хронологическом порядке (старые → новые)."""
+    from sqlalchemy import select as _select, desc
+    if not session_id:
+        return []
+    q = (
+        _select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(desc(ChatMessage.created_at))
+        .limit(limit)
+    )
+    result = await session.execute(q)
+    rows = list(result.scalars().all())
+    return list(reversed(rows))
 
 
 async def get_all_document_full_texts(
