@@ -478,10 +478,12 @@ async def run(
             sub_queries = []
 
     if sub_queries:
-        # По каждому под-запросу берём меньше top_k, итог дедуплицируется по id
+        # По каждому под-запросу берём меньше top_k. При дубле сохраняем
+        # ЛУЧШИЙ score (max), чтобы итоговая сортировка отражала «насколько
+        # релевантно для всех под-запросов» — chunk встречающийся в 2 sub-q
+        # = более релевантный.
         per_sub = max(8, top_k // max(1, len(sub_queries)))
-        seen_ids: set[str] = set()
-        merged: list = []
+        by_id: dict[str, "RetrievedChunk"] = {}
         for sq in [message] + sub_queries:
             try:
                 sub_chunks = await retrieve(sq, top_k=per_sub, include_archive=include_archive)
@@ -489,11 +491,10 @@ async def run(
                 logger.warning("retrieve failed for sub-query: %s", exc)
                 continue
             for c in sub_chunks:
-                if c.id in seen_ids:
-                    continue
-                seen_ids.add(c.id)
-                merged.append(c)
-        chunks = merged[:top_k + 10]  # небольшой запас на дедуп
+                existing = by_id.get(c.id)
+                if existing is None or (c.score or 0) > (existing.score or 0):
+                    by_id[c.id] = c
+        chunks = sorted(by_id.values(), key=lambda c: -(c.score or 0))[:top_k + 10]
         logger.info("planner-retrieval: %d sub-queries → %d unique chunks",
                     len(sub_queries), len(chunks))
     else:

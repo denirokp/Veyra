@@ -81,11 +81,17 @@ def is_grounded(
     statement_norm = statement.lower().strip()
     chunk_lower = chunk_content.lower()
 
-    # Очень короткие утверждения проверяем по прямому подстановочному поиску
+    # Очень короткие утверждения проверяем по прямому substring + fuzzy.
+    # Раньше отбрасывали при отсутствии прямого вхождения — слишком жёстко
+    # на парафразах вроде "TRI*M -12 пунктов" vs "TRI*M has decreased by 12
+    # points".
     if len(statement_norm) < 25:
         if statement_norm in chunk_lower:
             return True, "direct-substring"
-        return False, "short-not-found"
+        ratio = _fuzzy_substring_ratio(statement, chunk_content)
+        if ratio >= min_fuzzy:
+            return True, f"short-fuzzy {ratio:.2f}"
+        return False, f"short-not-found (fuzzy {ratio:.2f})"
 
     # Числа — если есть, должны совпасть (precision важна больше)
     numbers, names = extract_key_tokens(statement)
