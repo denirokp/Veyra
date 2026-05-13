@@ -101,7 +101,7 @@ async def extract_promises_from_text(
             raw = await call_llm(
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_content}],
-                max_tokens=1500,
+                max_tokens=2500,
             )
         except Exception as e:
             logger.error("promises chunk %d/%d failed: %s", i + 1, len(chunks), e)
