@@ -226,14 +226,9 @@ async def reindex_doc(
     if not doc.file_path or not Path(doc.file_path).exists():
         raise HTTPException(409, "Файл документа недоступен на диске")
 
-    # Чистим только чанки и связанные индексы — сам Document, entities,
-    # promises и contradictions оставляем (они частично могут быть useful).
-    vector_db.delete_document_chunks(doc_id, "actual")
-    vector_db.delete_document_chunks(doc_id, "archive")
-    await db.execute(delete(ChunkRow).where(ChunkRow.document_id == doc_id))
-    await update_document(db, doc_id, {"chunk_count": 0})
-    await db.commit()
-
+    # Снимаем нужные поля ДО update — после refresh() атрибуты становятся
+    # expired и доступ к ним выпадает из greenlet-контекста.
+    file_path = doc.file_path
     metadata = {
         "document_id": doc_id,
         "title": doc.title,
@@ -241,7 +236,15 @@ async def reindex_doc(
         "segment": doc.segment,
         "hierarchy_level": doc.hierarchy_level,
     }
-    background_tasks.add_task(_index_in_background, Path(doc.file_path), doc_id, metadata)
+
+    # Чистим только чанки и связанные индексы — сам Document, entities,
+    # promises и contradictions оставляем (они частично могут быть useful).
+    vector_db.delete_document_chunks(doc_id, "actual")
+    vector_db.delete_document_chunks(doc_id, "archive")
+    await db.execute(delete(ChunkRow).where(ChunkRow.document_id == doc_id))
+    doc = await update_document(db, doc_id, {"chunk_count": 0})
+
+    background_tasks.add_task(_index_in_background, Path(file_path), doc_id, metadata)
 
     return _to_out(doc)
 

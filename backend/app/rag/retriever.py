@@ -91,7 +91,9 @@ def _bm25_search(
 ) -> list[RetrievedChunk]:
     if not candidates:
         return []
-    tokenized = [c.content.lower().split() for c in candidates]
+    # Chroma может вернуть chunk с documents=None (битые/legacy записи) —
+    # защищаемся, иначе .lower() падает с AttributeError.
+    tokenized = [(c.content or "").lower().split() for c in candidates]
     bm25 = BM25Okapi(tokenized)
     scores = bm25.get_scores(query.lower().split())
     ranked = sorted(
@@ -134,7 +136,7 @@ async def retrieve(
         where=where_filter or None,
     )
     vec_chunks = [
-        RetrievedChunk(id=r["id"], content=r["content"], metadata=r["metadata"])
+        RetrievedChunk(id=r["id"], content=(r.get("content") or ""), metadata=r.get("metadata") or {})
         for r in vec_results
     ]
 
@@ -146,7 +148,7 @@ async def retrieve(
             where=where_filter or None,
         )
         arc_chunks = [
-            RetrievedChunk(id=r["id"], content=r["content"], metadata=r["metadata"])
+            RetrievedChunk(id=r["id"], content=(r.get("content") or ""), metadata=r.get("metadata") or {})
             for r in arch_results
         ]
         # Помечаем архивные
