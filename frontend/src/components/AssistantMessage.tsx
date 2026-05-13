@@ -163,10 +163,21 @@ export function AssistantMessage({ content, response }: Props) {
         </Collapsible>
       )}
 
-      {/* Метаданные — минимально */}
-      <div className="flex gap-3 text-xs text-zinc-600">
+      {/* Метаданные — что делалось под капотом + перформанс */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-600">
+        {metadata.mode_detected && (
+          <span className="text-zinc-500">mode: {metadata.mode_detected}</span>
+        )}
+        {(metadata as any).style && (
+          <span>style: {(metadata as any).style}</span>
+        )}
         <span>{metadata.chunks_retrieved} чанков</span>
         <span>{metadata.latency_ms}ms</span>
+        {metadata.agents_used && metadata.agents_used.length > 1 && (
+          <span title="LLM-агенты задействованные в обработке этого ответа">
+            agents: {metadata.agents_used.join(' → ')}
+          </span>
+        )}
       </div>
     </div>
   )
