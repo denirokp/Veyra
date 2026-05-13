@@ -187,8 +187,16 @@ async def _parse_llm_response(
 
         if chunk:
             doc_row = await get_document(db, chunk.document_id)
+            # SourceRef.document_id типизирован как UUID, а в Chroma могли
+            # попасть не-UUID id (старые тестовые прогоны и т.п.) — подменяем
+            # на nil-UUID и сохраняем оригинал в title.
+            from uuid import UUID as _UUID
+            try:
+                doc_uuid = _UUID(str(chunk.document_id))
+            except (TypeError, ValueError):
+                doc_uuid = _UUID("00000000-0000-0000-0000-000000000000")
             source = SourceRef(
-                document_id=chunk.document_id,  # type: ignore[arg-type]
+                document_id=doc_uuid,
                 title=doc_row.title if doc_row else (chunk.title or chunk.document_id),
                 status=chunk.status,  # type: ignore[arg-type]
                 hierarchy_level=chunk.hierarchy_level,
