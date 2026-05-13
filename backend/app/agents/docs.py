@@ -102,30 +102,35 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
     ),
     ChatMode.full: (
         "Сделай МАКСИМАЛЬНО ПОДРОБНЫЙ разбор по теме. Это главный режим — "
-        "пользователь хочет всю картину, а не краткое summary.\n\n"
+        "пользователь хочет всю картину, не упускать ни одной детали.\n\n"
         "У ТЕБЯ ДВА ИСТОЧНИКА КОНТЕКСТА:\n"
-        "(А) ОБЗОРЫ ВСЕХ ДОКУМЕНТОВ — компактные структурированные саммари "
-        "каждого документа целиком. Используй их чтобы видеть общую картину "
-        "каждого документа, понять структуру инициатив, найти владельцев, "
-        "сроки, цифры из таблиц.\n"
-        "(Б) ФРАГМЕНТЫ ДОКУМЕНТОВ — точные куски с source_id. Используй для "
-        "цитирования: каждый факт в JSON должен ссылаться на source_id из (Б).\n\n"
+        "(А) ПОЛНЫЕ ТЕКСТЫ или ОБЗОРЫ документов — это первичный источник. "
+        "Анализируй ЦЕЛИКОМ каждый документ. Не пропускай таблицы, риски, "
+        "appendix, имена ответственных, конкретные цифры из ячеек.\n"
+        "(Б) ФРАГМЕНТЫ — нумерованные куски для цитирования. Каждый факт "
+        "в JSON ссылается на source_id из (Б).\n\n"
         "ЖЁСТКИЕ ТРЕБОВАНИЯ:\n"
-        "1. answer (4-7 предложений): суть, статус, ключевые цифры с единицами, "
-        "временные горизонты. Опирайся на (А) для картины. НЕ повторяй то что "
-        "будет в facts.\n"
-        "2. facts: МИНИМУМ 10-15 фактов. ПО КАЖДОМУ документу обязательно "
-        "минимум 3-5 фактов. Используй цифры/имена из (А), цитату из (Б). "
-        "Каждый факт сопровождай source_id из (Б).\n"
-        "3. warnings: расхождения между документами, риски (если в обзорах "
-        "указаны probability/impact — выписывай), просроченные/без-владельца.\n"
-        "4. hypotheses: рыночный контекст, аналоги конкурентов из (А), "
-        "твои предположения с disclaimer.\n"
-        "5. requires_verification: что не закрыто планами, какие owners/deadlines "
-        "не назначены, что критично проверить.\n\n"
-        "НЕ округляй цифры. НЕ выдумывай. Если факт есть только в (А) но нет "
-        "в (Б) — можешь упомянуть в answer/warnings/hypotheses, но НЕ в facts "
-        "(facts требует source_id из фрагментов)."
+        "1. answer (5-8 предложений): суть, статус, ключевые цифры с единицами, "
+        "временные горизонты, главные владельцы. НЕ повторяй facts.\n"
+        "2. facts: МИНИМУМ 15-20 фактов. ПО КАЖДОМУ документу минимум 5-8. "
+        "Извлекай ВСЁ что есть: метрики из таблиц (с единицей и периодом), "
+        "имена ответственных, deadlines, ROADMAP, риски с probability/impact, "
+        "конкретные стримы с цифрами эффекта (например '+2.1 Bn RUB by CY30'). "
+        "source_id обязателен.\n"
+        "3. warnings: расхождения между документами, риски, противоречия, "
+        "просроченные/без-владельца планы.\n"
+        "4. hypotheses: рыночный контекст, аналоги конкурентов (если есть в "
+        "документах — суммируй; иначе твои знания с disclaimer).\n"
+        "5. requires_verification: что не закрыто планами, какие "
+        "owners/deadlines не назначены, что критично проверить.\n\n"
+        "ПРАВИЛА:\n"
+        "- НЕ округляй цифры. Копируй точно.\n"
+        "- НЕ выдумывай факты которых нет.\n"
+        "- Если в источниках есть две разные цифры одной метрики — обе в "
+        "facts + одна warning о расхождении.\n"
+        "- Если факт есть в (А) но нет точного match в (Б) — упомяни в "
+        "answer/warnings; в facts ставь source_id ближайшего релевантного "
+        "фрагмента из (Б)."
     ),
 }
 
@@ -269,17 +274,41 @@ async def run(
     top_k = 30 if mode == ChatMode.full else 15
     chunks = await retrieve(message, top_k=top_k, include_archive=include_archive)
 
-    # Document-level контекст: для full режима подгружаем брифы ВСЕХ актуальных
-    # документов целиком — чтобы LLM видел картину каждого дока, а не только
-    # retrieve-фрагменты. Это и есть document-level анализ.
+    # Document-level контекст: для full режима подгружаем ПОЛНЫЕ ТЕКСТЫ всех
+    # актуальных документов, если они влезают в контекст модели. Иначе
+    # fallback на брифы (компактные структурированные саммари).
+    # Цель — дать LLM полную картину без потерь от чанкинга.
     doc_briefs_block = ""
+    full_texts_block = ""
     if mode == ChatMode.full and db is not None:
-        from app.storage.sql_db import get_all_document_briefs
-        briefs = await get_all_document_briefs(db, statuses=["actual"], limit=20)
-        if briefs:
-            parts = [f"=== ОБЗОР ДОКУМЕНТА: {doc.title} (L{doc.hierarchy_level or 5}) ===\n{brief}"
-                     for doc, brief in briefs]
-            doc_briefs_block = "\n\n".join(parts)
+        # Бюджет контекста: moonshot-v1-128k = 128K tokens ≈ 500K chars input,
+        # из них выделяем ~100K chars на полные тексты, остальное — на чанки,
+        # entity-блок, system prompt, ответ.
+        FULL_TEXTS_BUDGET = 120_000
+
+        from app.storage.sql_db import (
+            get_all_document_briefs,
+            get_all_document_full_texts,
+        )
+        full_texts = await get_all_document_full_texts(db, statuses=["actual"], limit=20)
+        total = sum(len(t) for _, t in full_texts)
+        if full_texts and total <= FULL_TEXTS_BUDGET:
+            parts = [
+                f"=== ПОЛНЫЙ ТЕКСТ: {doc.title} (L{doc.hierarchy_level or 5}, {doc.status}) ===\n{text}"
+                for doc, text in full_texts
+            ]
+            full_texts_block = "\n\n".join(parts)
+            logger.info("full-mode: using %d full texts (%d chars total)",
+                        len(full_texts), total)
+        else:
+            # Корпус не влезает — fallback на брифы
+            briefs = await get_all_document_briefs(db, statuses=["actual"], limit=30)
+            if briefs:
+                parts = [f"=== ОБЗОР ДОКУМЕНТА: {doc.title} (L{doc.hierarchy_level or 5}) ===\n{brief}"
+                         for doc, brief in briefs]
+                doc_briefs_block = "\n\n".join(parts)
+                logger.info("full-mode: corpus too big (%d chars), fell back to %d briefs",
+                            total, len(briefs))
 
     # Entity memory — обогащаем контекст релевантными сущностями
     entity_block = ""
@@ -298,15 +327,23 @@ async def run(
     context = _build_context(chunks)
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
 
-    briefs_section = (
-        f"\n\nОБЗОРЫ ВСЕХ ДОКУМЕНТОВ В БАЗЕ (для общей картины каждого дока):\n{doc_briefs_block}\n"
-        if doc_briefs_block else ""
-    )
+    if full_texts_block:
+        knowledge_section = (
+            "\n\nПОЛНЫЕ ТЕКСТЫ ДОКУМЕНТОВ (анализируй ВСЁ что есть, не упускай детали):\n"
+            + full_texts_block + "\n"
+        )
+    elif doc_briefs_block:
+        knowledge_section = (
+            "\n\nОБЗОРЫ ВСЕХ ДОКУМЕНТОВ В БАЗЕ (для общей картины каждого дока):\n"
+            + doc_briefs_block + "\n"
+        )
+    else:
+        knowledge_section = ""
 
     user_message = (
         f"Режим: {mode.value}\n"
         f"Инструкция: {mode_instruction}\n"
-        + briefs_section
+        + knowledge_section
         + f"\nФРАГМЕНТЫ ДОКУМЕНТОВ (для точных цитат с source_id):\n{context}"
         + (f"\n\n{entity_block}" if entity_block else "")
         + extra_context

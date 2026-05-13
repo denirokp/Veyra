@@ -75,6 +75,10 @@ class Document(Base):
     # инициативы, владельцы, сроки, риски. Используется для document-level
     # анализа (full mode), чтобы LLM видел картину дока целиком, а не куски.
     brief = Column(Text)
+    # Полный извлечённый текст документа — кэш parse_text. Нужен для full-mode
+    # анализа, когда мы хотим дать LLM весь документ без RAG-чанкинга. Если
+    # документ больше контекста модели — fallback на brief + chunks.
+    parsed_text = Column(Text)
 
     chunks = relationship("Chunk", back_populates="document")
 
@@ -268,6 +272,27 @@ async def get_all_document_briefs(
     return [(d, d.brief) for d in docs if d.brief]
 
 
+async def get_all_document_full_texts(
+    session: AsyncSession,
+    statuses: list[str] | None = None,
+    limit: int = 50,
+) -> list[tuple[Document, str]]:
+    """Возвращает (Document, parsed_text) для всех документов с кэшированным
+    полным текстом. Для full-mode анализа без RAG-потерь."""
+    from sqlalchemy import select as _select
+    statuses = statuses or ["actual"]
+    q = (
+        _select(Document)
+        .where(Document.status.in_(statuses))
+        .where(Document.parsed_text.isnot(None))
+        .where(Document.parsed_text != "")
+        .limit(limit)
+    )
+    result = await session.execute(q)
+    docs = list(result.scalars().all())
+    return [(d, d.parsed_text) for d in docs if d.parsed_text]
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         # PRAGMA foreign_keys=ON в SQLite по умолчанию ВЫКЛЮЧЕНО — без этого
@@ -279,6 +304,7 @@ async def init_db() -> None:
             "ALTER TABLE documents ADD COLUMN file_hash VARCHAR",
             "CREATE INDEX IF NOT EXISTS ix_documents_file_hash ON documents(file_hash)",
             "ALTER TABLE documents ADD COLUMN brief TEXT",
+            "ALTER TABLE documents ADD COLUMN parsed_text TEXT",
         ):
             try:
                 await conn.exec_driver_sql(stmt)

@@ -96,6 +96,13 @@ async def index_document(
     text = parse_text(file_path)
     _log.info("index doc=%s parse %.2fs, %d chars", document_id, _time.monotonic() - _t0, len(text))
 
+    # Кэшируем полный текст в БД — для full-mode чата без RAG-потерь.
+    from app.storage.sql_db import update_document as _update_document
+    try:
+        await _update_document(db, document_id, {"parsed_text": text})
+    except Exception:
+        _log.warning("failed to cache parsed_text for doc=%s", document_id)
+
     _tc = _time.monotonic()
     chunks: list[Chunk] = chunk_document(text, document_metadata)
     if not chunks:

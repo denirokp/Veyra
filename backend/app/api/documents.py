@@ -256,8 +256,9 @@ async def regenerate_brief(
     db: AsyncSession = Depends(get_session),
 ):
     """Сгенерировать (или пересоздать) document-level бриф для существующего
-    документа. Полезно после правки промпта или для документов, загруженных
-    до того как brief был внедрён."""
+    документа. Заодно кэширует parsed_text для full-mode анализа без RAG-потерь.
+    Полезно после правки промпта или для документов, загруженных до того как
+    brief/parsed_text был внедрён."""
     from app.rag.indexer import parse_text as _parse_text
     from app.skills.document_brief import generate_document_brief
 
@@ -274,6 +275,9 @@ async def regenerate_brief(
         async with DbSession(engine) as bdb:
             try:
                 text = _parse_text(file_path)
+                # Кэш полного текста — для full-mode без RAG
+                await update_document(bdb, doc_id, {"parsed_text": text})
+                # И бриф
                 brief = await generate_document_brief(text, title)
                 if brief:
                     await update_document(bdb, doc_id, {"brief": brief})
