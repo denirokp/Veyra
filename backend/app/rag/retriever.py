@@ -84,6 +84,49 @@ def _dedupe_overlapping(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
     return kept
 
 
+def _interleave_by_document(
+    chunks: list[RetrievedChunk], top_k: int
+) -> list[RetrievedChunk]:
+    """Гарантируем что в финальном top_k представлены ВСЕ документы из базы.
+    Без этого если у одного документа много семантически близких чанков,
+    он забивает топ и другие документы исчезают из контекста LLM.
+    Стратегия: round-robin по документам в порядке убывания score, плюс
+    cap на документ = max(2, top_k // num_docs)."""
+    if not chunks:
+        return []
+    by_doc: dict[str, list[RetrievedChunk]] = {}
+    for c in chunks:
+        by_doc.setdefault(c.document_id or c.id, []).append(c)
+
+    num_docs = len(by_doc)
+    if num_docs <= 1:
+        return chunks[:top_k]
+
+    per_doc_cap = max(2, top_k // num_docs)
+    # Round-robin: на каждой итерации берём топ-1 из каждого документа,
+    # пока не наберём top_k или не исчерпаем чанки. Лимит per_doc_cap
+    # предотвращает доминирование одного документа.
+    queues = {doc_id: list(cs) for doc_id, cs in by_doc.items()}
+    taken: dict[str, int] = {doc_id: 0 for doc_id in by_doc}
+    result: list[RetrievedChunk] = []
+    while len(result) < top_k and any(queues.values()):
+        progress = False
+        # Документы в порядке max-score, чтобы сильные шли первыми
+        for doc_id in sorted(queues, key=lambda d: -(queues[d][0].score if queues[d] else -1e9)):
+            if not queues[doc_id]:
+                continue
+            if taken[doc_id] >= per_doc_cap:
+                continue
+            result.append(queues[doc_id].pop(0))
+            taken[doc_id] += 1
+            progress = True
+            if len(result) >= top_k:
+                break
+        if not progress:
+            break
+    return result
+
+
 def _bm25_search(
     query: str,
     candidates: list[RetrievedChunk],
@@ -128,11 +171,12 @@ async def retrieve(
     if segment_filter:
         where_filter["segment"] = segment_filter
 
-    # Векторный поиск
+    # Векторный поиск — берём щедрый кандидат-пул (60 vs target top_k≈15-30),
+    # чтобы _interleave_by_document мог раздать долю каждому документу.
     vec_results = vector_db.query_chunks(
         query_embedding,
         collection_name="actual",
-        n_results=20,
+        n_results=max(60, top_k * 2),
         where=where_filter or None,
     )
     vec_chunks = [
@@ -171,7 +215,9 @@ async def retrieve(
     # Дедуп overlapping чанков (соседи по индексу часто пересекаются)
     deduped = _dedupe_overlapping(boosted)
 
-    return deduped[:top_k]
+    # Diversity по документам — гарантируем что каждый документ в базе
+    # представлен в результатах, иначе одиночные "жирные" доки забивают топ.
+    return _interleave_by_document(deduped, top_k)
 
 
 async def retrieve_for_writing(
