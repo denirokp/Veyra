@@ -26,10 +26,28 @@ logger = logging.getLogger(__name__)
 
 # Триггеры в запросе на которые мы хотим веб-поиск
 EXTERNAL_TRIGGERS = (
-    "опыт из вне", "внешний опыт", "best practices", "бенчмарк",
-    "как делают", "конкурент", "индустри", "мировой опыт",
-    "what does", "how do other", "market practice",
+    "опыт из вне", "опыт изне", "извне", "внешн", "best practices",
+    "бенчмарк", "benchmark", "как делают", "конкурент", "competitor",
+    "индустри", "industry", "мировой опыт", "что в мире",
+    "what does", "how do other", "market practice", "лучшие практики",
+    "примеры из", "примеры с рынка", "примеры рынка", "опыт компаний",
+    "из мира", "рыночный опыт", "опыт стартап", "опыт sass",
+    "опыт saas", "в saas", "best in class",
 )
+
+
+def _generate_search_query(user_query: str) -> str:
+    """Извлекает из пользовательского запроса ту часть, которую имеет смысл
+    искать в интернете. Убирает «исходя из документа X», ссылки на внутренние
+    инициативы — оставляет смысловое ядро."""
+    q = user_query
+    # Убираем «исходя из / описанн в / документ X»
+    q = re.sub(r"\s*(?:исходя из|описанн[ыо]\w*\s+в|из документа|в нашем|внутреннем)[^.]*?документ\w*", "", q, flags=re.IGNORECASE)
+    q = re.sub(r"\s*возьми\s*(?:также|еще)?\s*опыт[а-яё\s]*", "", q, flags=re.IGNORECASE)
+    # Чистка пунктуации в конце
+    q = re.sub(r"[?.!]+$", "", q).strip()
+    # Ограничение длины запроса для search API (обычно 300-500 символов хорошо)
+    return q[:300]
 
 
 def should_do_web_search(query: str) -> bool:
@@ -131,8 +149,11 @@ def format_for_prompt(results: list[dict], max_chars: int = 8000) -> str:
 async def do_research(query: str, max_results: int = 5) -> str:
     """Полный пайплайн: query → результаты поиска → форматированный блок.
     Возвращает пустую строку если поиск выключен или ничего не нашлось."""
-    results = await search(query, max_results=max_results)
+    search_q = _generate_search_query(query)
+    if not search_q:
+        return ""
+    results = await search(search_q, max_results=max_results)
     if not results:
         return ""
-    logger.info("web_research: %d results for %r", len(results), query[:60])
+    logger.info("web_research: %d results for %r", len(results), search_q[:60])
     return format_for_prompt(results)
