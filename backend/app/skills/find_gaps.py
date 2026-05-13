@@ -1,4 +1,4 @@
-"""Skill: find_gaps — темы из корпуса, отсутствующие в текущей стратегии."""
+"""Skill: find_gaps — темы из документов, отсутствующие в текущей стратегии."""
 from __future__ import annotations
 
 import json
@@ -21,10 +21,10 @@ EXTRACT_TOPICS_PROMPT = """\
 
 GAP_ANALYSIS_PROMPT = """\
 Тебе даны два списка тем:
-1. КОРПУС — все темы из всех документов команды
+1. ВСЕ ДОКУМЕНТЫ — все темы из всех документов команды
 2. СТРАТЕГИЯ — темы из документов текущей стратегии
 
-Найди темы из КОРПУСА которых НЕТ в СТРАТЕГИИ.
+Найди темы из ВСЕХ ДОКУМЕНТОВ которых НЕТ в СТРАТЕГИИ.
 Это "серые зоны" — направления которые изучали, но не взяли в стратегию.
 
 Верни JSON массив объектов:
@@ -96,7 +96,7 @@ async def find_gaps(db: AsyncSession) -> list[dict]:
 
     llm = get_llm()
     user_content = (
-        f"КОРПУС (все темы):\n{json.dumps(all_topics, ensure_ascii=False)}\n\n"
+        f"ВСЕ ДОКУМЕНТЫ (все темы):\n{json.dumps(all_topics, ensure_ascii=False)}\n\n"
         f"СТРАТЕГИЯ (темы из стратегических документов):\n"
         f"{json.dumps(strategy_topics, ensure_ascii=False)}"
     )

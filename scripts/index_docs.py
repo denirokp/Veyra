@@ -1,4 +1,4 @@
-"""Первичная индексация корпуса документов."""
+"""Первичная индексация всех документов в data/docs."""
 import asyncio
 import sys
 import uuid
@@ -9,13 +9,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 from app.rag.indexer import index_document
 from app.storage.sql_db import AsyncSession, create_document, engine, init_db
 
-CORPUS_DIR = Path("data/corpus")
+DOCS_DIR = Path("data/docs")
 SUPPORTED = {".pdf", ".docx", ".md", ".txt"}
 
 
 async def main():
     await init_db()
-    files = [f for f in CORPUS_DIR.rglob("*") if f.suffix.lower() in SUPPORTED]
+    files = [f for f in DOCS_DIR.rglob("*") if f.suffix.lower() in SUPPORTED]
     print(f"Найдено {len(files)} документов")
 
     async with AsyncSession(engine) as db:

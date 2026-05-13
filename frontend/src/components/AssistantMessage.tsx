@@ -22,7 +22,7 @@ export function AssistantMessage({ content, response }: Props) {
       {facts.length > 0 && (
         <section className="rounded-lg border border-blue-800/60 bg-blue-950/30 p-3 space-y-2">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-            Факты из корпуса
+            Факты из документов
           </h4>
           <ul className="space-y-2.5">
             {facts.map((f, i) => (

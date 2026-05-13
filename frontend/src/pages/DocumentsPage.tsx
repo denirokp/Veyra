@@ -5,7 +5,7 @@ import {
   uploadDocument,
   patchDocument,
   deleteDocument,
-  getCorpusStats,
+  getDocsStats,
 } from '../api/client'
 import type { Document, DocumentStatus } from '../types'
 import clsx from 'clsx'
@@ -125,7 +125,7 @@ function UploadZone() {
   )
 }
 
-export function CorpusPage() {
+export function DocumentsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const { data: docs = [] } = useQuery({
     queryKey: ['documents', statusFilter],
@@ -133,13 +133,13 @@ export function CorpusPage() {
   })
   const { data: stats } = useQuery({
     queryKey: ['stats'],
-    queryFn: getCorpusStats,
+    queryFn: getDocsStats,
   })
 
   return (
     <div className="flex flex-col h-full p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-zinc-100">Корпус документов</h2>
+        <h2 className="text-lg font-semibold text-zinc-100">Документы</h2>
         {stats && (
           <div className="flex gap-4 text-xs text-zinc-400">
             <span>Всего: <strong className="text-zinc-200">{stats.total_documents}</strong></span>

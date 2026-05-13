@@ -24,8 +24,8 @@ from app.storage.sql_db import (
 
 router = APIRouter(tags=["documents"])
 
-CORPUS_DIR = Path(settings.CORPUS_DIR)
-CORPUS_DIR.mkdir(parents=True, exist_ok=True)
+DOCS_DIR = Path(settings.DOCS_DIR)
+DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _to_out(doc) -> DocumentOut:
@@ -64,7 +64,7 @@ async def upload_document(
         raise HTTPException(400, f"Неподдерживаемый формат: {suffix}")
 
     doc_id = str(uuid.uuid4())
-    file_path = CORPUS_DIR / f"{doc_id}{suffix}"
+    file_path = DOCS_DIR / f"{doc_id}{suffix}"
 
     # Сохраняем файл
     with file_path.open("wb") as f:

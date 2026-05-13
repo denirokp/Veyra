@@ -3,7 +3,7 @@ import type {
   ChatRequest,
   ChatResponse,
   Document,
-  CorpusStats,
+  DocsStats,
   LogicSignal,
   InitiativeReviewResult,
   MissingMetric,
@@ -59,8 +59,8 @@ export async function deleteDocument(id: string): Promise<void> {
   await api.delete(`/documents/${id}`)
 }
 
-export async function getCorpusStats(): Promise<CorpusStats> {
-  const { data } = await api.get<CorpusStats>('/corpus/stats')
+export async function getDocsStats(): Promise<DocsStats> {
+  const { data } = await api.get<DocsStats>('/docs/stats')
   return data
 }
 
@@ -106,6 +106,6 @@ export async function suggestMetrics(
 }
 
 export async function getGaps() {
-  const { data } = await api.get('/corpus/gaps')
+  const { data } = await api.get('/docs/gaps')
   return data as Array<{ topic: string; reason: string; priority: 'high' | 'medium' | 'low' }>
 }

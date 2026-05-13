@@ -1,4 +1,4 @@
-"""Skill: initiative_review — 7-блочный разбор инициативы через корпус документов."""
+"""Skill: initiative_review — 7-блочный разбор инициативы через документы команды."""
 from __future__ import annotations
 
 import asyncio
@@ -18,21 +18,21 @@ from app.storage.sql_db import (
 
 SYSTEM_PROMPT = """\
 Ты аналитик корпоративной памяти. Ты получаешь текст инициативы и релевантный контекст
-из корпуса документов компании. Твоя задача — дать 7-блочный структурированный разбор.
+из документов компании. Твоя задача — дать 7-блочный структурированный разбор.
 
 Верни JSON строго с этими ключами:
 {
   "summary": "1-2 предложения: суть инициативы своими словами",
   "strategic_anchors": [
     {
-      "title": "Название документа из корпуса",
+      "title": "Название документа из документов",
       "relevance": "Почему этот документ релевантен инициативе",
       "alignment": "supports|neutral|conflicts"
     }
   ],
   "conflicts": [
     {
-      "description": "Описание: что именно из корпуса расходится с инициативой",
+      "description": "Описание: что именно из документов расходится с инициативой",
       "severity": "high|medium|low",
       "source": "Документ-источник"
     }
@@ -45,12 +45,12 @@ SYSTEM_PROMPT = """\
   ],
   "analogues": [
     {
-      "title": "Похожая инициатива или документ из корпуса",
+      "title": "Похожая инициатива или документ из документов",
       "outcome": "Чем закончилось / текущий статус",
       "lesson": "Вывод: что учесть"
     }
   ],
-  "external_context": "Внешний рыночный контекст если известен из корпуса, иначе 'Нет данных'",
+  "external_context": "Внешний рыночный контекст если известен из документов, иначе 'Нет данных'",
   "recommendation": {
     "verdict": "approve|needs_work|reject",
     "reasoning": "2-4 предложения с конкретным обоснованием"
@@ -80,7 +80,7 @@ def _build_context(
     ]
 
     if chunks:
-        parts.append("=== РЕЛЕВАНТНЫЕ ДОКУМЕНТЫ ИЗ КОРПУСА ===")
+        parts.append("=== РЕЛЕВАНТНЫЕ ДОКУМЕНТЫ ===")
         seen_docs: set[str] = set()
         for c in chunks[:12]:
             doc_id = c.document_id
@@ -100,7 +100,7 @@ def _build_context(
             )
 
     if logic_signals:
-        parts.append("\n=== ЛОГИЧЕСКИЕ СИГНАЛЫ В КОРПУСЕ ===")
+        parts.append("\n=== ЛОГИЧЕСКИЕ СИГНАЛЫ В ДОКУМЕНТАХ ===")
         for sig in logic_signals[:5]:
             parts.append(
                 f"• [{sig.signal_type}] {sig.statement_a[:200]} | vs | {sig.statement_b[:200]}"

@@ -100,7 +100,7 @@ export function DocumentUploadMessage({ doc, review, text, onAsk }: Props) {
             </span>
           )}
         </div>
-        <span className="text-xs text-zinc-600 shrink-0">добавлен в корпус</span>
+        <span className="text-xs text-zinc-600 shrink-0">загружен</span>
       </div>
 
       {/* Summary */}
@@ -134,7 +134,7 @@ export function DocumentUploadMessage({ doc, review, text, onAsk }: Props) {
       {conflictingAnchors.length > 0 && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-orange-400 uppercase tracking-wide">
-            Расходится с документами корпуса
+            Расходится с другими документами
           </p>
           <div className="space-y-0.5">
             {conflictingAnchors.map((a, i) => <AnchorItem key={i} a={a} />)}
@@ -172,7 +172,7 @@ export function DocumentUploadMessage({ doc, review, text, onAsk }: Props) {
         </p>
       )}
       {review && !hasIssues && gaps.length === 0 && (
-        <p className="text-xs text-emerald-500">✓ Явных противоречий с корпусом не найдено</p>
+        <p className="text-xs text-emerald-500">✓ Явных противоречий с другими документами не найдено</p>
       )}
 
       {/* Reasoning */}

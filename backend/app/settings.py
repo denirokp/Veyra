@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/khronika.db"
 
     # Paths
-    CORPUS_DIR: str = "./data/corpus"
+    DOCS_DIR: str = "./data/docs"
     STYLE_ANCHORS_DIR: str = "./data/style_anchors"
 
     # Server

@@ -237,7 +237,7 @@ function ReviewResult({
         </div>
       </Section>
 
-      <Section title="5. Аналоги в корпусе" empty={result.analogues.length === 0}>
+      <Section title="5. Аналоги в документах" empty={result.analogues.length === 0}>
         <div className="space-y-2">
           {result.analogues.map((a, i) => <AnalogueCard key={i} a={a} />)}
         </div>
@@ -273,7 +273,7 @@ export function InitiativeReviewPage() {
         <div>
           <h2 className="text-base font-semibold text-zinc-100">Разбор инициативы</h2>
           <p className="text-xs text-zinc-500 mt-0.5">
-            7-блочный анализ через корпус + рыночный контекст
+            7-блочный анализ по документам + рыночный контекст
           </p>
         </div>
 
@@ -329,7 +329,7 @@ export function InitiativeReviewPage() {
         {mut.isPending && (
           <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-3">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
-            <p className="text-sm">Анализирую корпус + рыночный контекст...</p>
+            <p className="text-sm">Анализирую документы + рыночный контекст...</p>
           </div>
         )}
 

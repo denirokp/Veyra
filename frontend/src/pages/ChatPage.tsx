@@ -99,7 +99,7 @@ export function ChatPage() {
           <div className="flex justify-start">
             <div className="bg-zinc-800 rounded-2xl rounded-tl-sm px-4 py-3">
               <span className={clsx('text-sm', uploading ? 'text-blue-400' : 'text-zinc-400', 'animate-pulse')}>
-                {uploading ? 'Загружаю и анализирую документ…' : 'Анализирую корпус…'}
+                {uploading ? 'Загружаю и анализирую документ…' : 'Ищу по документам…'}
               </span>
             </div>
           </div>

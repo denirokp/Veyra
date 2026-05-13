@@ -9,11 +9,11 @@
 
 ## Что делает
 
-- Отвечает на вопросы по корпусу документов с ссылками на источники
+- Отвечает на вопросы по документам команды со ссылками на источники
 - Находит числовые расхождения между документами
 - Ведёт реестр обещаний и планов
 - Выявляет серые зоны — темы изученные, но не вошедшие в стратегию
-- Пишет документы в стиле команды на основе корпуса
+- Пишет документы в стиле команды на основе всей библиотеки
 
 ## Стек
 
@@ -32,7 +32,7 @@
 Хроника/
 ├── backend/
 │   ├── app/
-│   │   ├── agents/          # Orchestrator, CorpusAgent
+│   │   ├── agents/          # Orchestrator, DocsAgent
 │   │   ├── skills/          # extract_entities, find_contradictions, ...
 │   │   ├── rag/             # indexer, retriever, chunker
 │   │   ├── api/             # FastAPI routers
@@ -44,16 +44,16 @@
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       ├── pages/           # Chat, Corpus, Contradictions, Promises, Write
+│       ├── pages/           # Chat, Documents, Contradictions, Promises, Write
 │       ├── store/           # Zustand
 │       └── api/
 ├── data/
-│   ├── corpus/              # загруженные документы (не в git)
+│   ├── docs/                # загруженные документы (не в git)
 │   └── style_anchors/       # эталоны стиля (не в git)
 ├── docs/
 │   └── TZ.md                # Техническое задание v3.0
 └── scripts/
-    └── index_corpus.py      # первичная индексация
+    └── index_docs.py        # первичная индексация
 ```
 
 ## Быстрый старт
@@ -66,8 +66,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
-# Первичная индексация корпуса
-python scripts/index_corpus.py
+# Первичная индексация документов
+python scripts/index_docs.py
 
 # Frontend
 cd frontend

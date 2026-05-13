@@ -11,7 +11,7 @@ from app.storage.sql_db import search_entities_by_query
 
 SYSTEM_PROMPT = """\
 Ты аналитик KPI. Ты получаешь описание инициативы или документа и список метрик,
-которые уже упоминаются в корпусе для похожих тем.
+которые уже упоминаются в документах для похожих тем.
 
 Предложи метрики, которых НЕ хватает для полноценного измерения успеха инициативы.
 
@@ -40,7 +40,7 @@ async def suggest_missing_metrics(
     text: str,
     db: AsyncSession,
 ) -> list[dict]:
-    """Предлагает недостающие KPI на основе корпусных метрик и LLM."""
+    """Предлагает недостающие KPI на основе метрик из документов и LLM."""
     keywords = [w for w in (title + " " + text[:200]).lower().split() if len(w) > 3][:8]
     existing_entities = await search_entities_by_query(db, keywords, limit=20)
 
@@ -54,9 +54,9 @@ async def suggest_missing_metrics(
         f"Инициатива: {title}\n\n"
         f"Описание: {text[:1000]}\n\n"
         + (
-            f"Метрики уже упомянутые в корпусе:\n" + "\n".join(f"- {m}" for m in existing_metrics)
+            f"Метрики уже упомянутые в документах:\n" + "\n".join(f"- {m}" for m in existing_metrics)
             if existing_metrics
-            else "Метрики в корпусе не найдены."
+            else "Метрики в документах не найдены."
         )
     )
 

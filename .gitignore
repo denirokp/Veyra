@@ -85,9 +85,9 @@ temp/
 secrets/
 
 # Хроника — данные (не коммитим документы и индексы)
-data/corpus/*
+data/docs/*
 data/style_anchors/*
-!data/corpus/.gitkeep
+!data/docs/.gitkeep
 !data/style_anchors/.gitkeep
 data/chroma/
 data/*.db

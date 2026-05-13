@@ -63,7 +63,7 @@ export interface Document {
   indexed_at?: string
 }
 
-export interface CorpusStats {
+export interface DocsStats {
   total_documents: number
   by_status: Record<DocumentStatus, number>
   anchor_documents: number

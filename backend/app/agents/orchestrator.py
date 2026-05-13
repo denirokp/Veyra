@@ -6,7 +6,7 @@ import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents import corpus as corpus_agent
+from app.agents import docs as docs_agent
 from app.clients import get_llm
 from app.settings import settings
 from uuid import UUID
@@ -17,7 +17,7 @@ _MODE_CLASSIFIER_PROMPT = """\
 Определи режим обработки запроса пользователя к корпоративной базе знаний.
 
 Режимы:
-- search: общий поиск и синтез информации из корпуса (по умолчанию)
+- search: общий поиск и синтез информации из документов (по умолчанию)
 - contradictions: пользователь ищет расхождения, конфликты или несоответствия в данных \
 («две разные цифры», «не сходится», «кто прав», «разные версии», «противоречие»)
 - promises: пользователь спрашивает о планах, обещаниях, дедлайнах, что должно быть сделано \
@@ -94,7 +94,7 @@ async def _run_validate(message: str, db: AsyncSession) -> dict:
         "warnings": warnings,
         "requires_verification": gaps,
         "chunks_used": review.get("metadata", {}).get("chunks_used", 0),
-        "agents_used": ["corpus", "initiative_review", "market_agent"],
+        "agents_used": ["docs", "initiative_review", "market_agent"],
     }
 
 
@@ -108,7 +108,7 @@ async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
     if mode == ChatMode.validate:
         result = await _run_validate(request.message, db)
     else:
-        result = await corpus_agent.run(
+        result = await docs_agent.run(
             message=request.message,
             mode=mode,
             file_content=file_content,
@@ -125,7 +125,7 @@ async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
         requires_verification=result["requires_verification"],
         metadata={
             "mode_detected": mode.value,
-            "agents_used": result.get("agents_used", ["corpus"]),
+            "agents_used": result.get("agents_used", ["docs"]),
             "latency_ms": latency_ms,
             "chunks_retrieved": result.get("chunks_used", 0),
         },

@@ -1,16 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { getCorpusStats } from '../api/client'
+import { getDocsStats } from '../api/client'
 import clsx from 'clsx'
 
 interface TopBarProps {
-  onCorpusOpen: () => void
+  onDocumentsOpen: () => void
   onClear: () => void
 }
 
-export function TopBar({ onCorpusOpen, onClear }: TopBarProps) {
+export function TopBar({ onDocumentsOpen, onClear }: TopBarProps) {
   const { data: stats } = useQuery({
     queryKey: ['stats'],
-    queryFn: getCorpusStats,
+    queryFn: getDocsStats,
     refetchInterval: 60_000,
   })
 
@@ -46,10 +46,10 @@ export function TopBar({ onCorpusOpen, onClear }: TopBarProps) {
 
       <div className="flex items-center gap-2">
         <button
-          onClick={onCorpusOpen}
+          onClick={onDocumentsOpen}
           className="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors border border-zinc-700"
         >
-          📂 Корпус
+          📂 Документы
         </button>
         <button
           onClick={onClear}
