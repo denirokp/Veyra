@@ -516,6 +516,45 @@ async def run(
         raw, chunks, db
     )
 
+    # Self-correction только для full mode: ещё один LLM-вызов критикует ответ,
+    # и если есть проблемы — генерим заново с feedback'ом.
+    agents = ["docs"]
+    if mode == ChatMode.full and chunks:
+        try:
+            from app.skills.self_check import critique
+            payload = {
+                "answer": answer,
+                "facts": facts,
+                "hypotheses": hypotheses,
+                "warnings": warnings,
+                "requires_verification": requires,
+            }
+            crit = await critique(message, payload, context)
+            if not crit.get("ok", True) and (crit.get("issues") or crit.get("missing_facts")):
+                logger.info("self_check: regenerating with %d issues, %d missing",
+                            len(crit.get("issues", [])), len(crit.get("missing_facts", [])))
+                feedback = (
+                    "\n\nКРИТИКА ПРЕДЫДУЩЕЙ ВЕРСИИ ОТВЕТА (исправь эти проблемы):\n"
+                    + "\n".join(f"- {i}" for i in crit.get("issues", []))
+                    + (
+                        "\n\nКЛЮЧЕВЫЕ ФАКТЫ КОТОРЫЕ НУЖНО ДОБАВИТЬ:\n"
+                        + "\n".join(f"- {f}" for f in crit.get("missing_facts", []))
+                        if crit.get("missing_facts") else ""
+                    )
+                )
+                raw2 = await call_llm(
+                    system=SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": user_message + feedback}],
+                    max_tokens=max_tokens,
+                )
+                ans2, facts2, hyp2, warn2, req2 = await _parse_llm_response(raw2, chunks, db)
+                # Пере-используем результат если он не "пустой" (защита от регресса)
+                if ans2 and len(facts2) >= max(1, len(facts) - 2):
+                    answer, facts, hypotheses, warnings, requires = ans2, facts2, hyp2, warn2, req2
+                    agents.append("self_check")
+        except Exception as exc:
+            logger.warning("self_check pipeline error (skipping): %s", exc)
+
     # Предупреждение если нет чанков
     if not chunks:
         warnings.append("⚠️ Релевантных документов по данному запросу не найдено")
@@ -533,5 +572,5 @@ async def run(
         "warnings": warnings,
         "requires_verification": requires,
         "chunks_used": len(chunks),
-        "agents_used": ["docs"],
+        "agents_used": agents,
     }
