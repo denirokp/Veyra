@@ -43,11 +43,20 @@ SYSTEM_PROMPT = """\
   "requires_verification": ["Вопрос если данных недостаточно"]
 }
 
-source_id — это НОМЕР источника (1, 2, 3...) из заголовка [Источник N] в контексте выше.\
+source_id — это НОМЕР источника (1, 2, 3...) из заголовка [Источник N] в контексте выше. \
+source_id используется ТОЛЬКО внутри объектов facts, как поле "source_id": N. \
+В строках answer/hypotheses/warnings/requires_verification ЗАПРЕЩЕНО упоминать \
+номера источников вида "[Источник 5]", "Source 7", "(см. 3)" и т.п. — пиши \
+название документа или раздел словами, если нужно атрибутировать.
 
-
-Если в предоставленных фрагментах встречаются разные значения одной метрики — \
-обязательно отметь обе цифры в warnings с указанием источника каждой.
+ПРАВИЛА СРАВНЕНИЯ МЕТРИК (важно):
+- Помечай как "расхождение" в warnings ТОЛЬКО если одна и та же метрика \
+(совпадают имя ИЛИ нормализованное имя), один и тот же период, одна и та же \
+единица — имеет разные значения в разных документах.
+- Разные метрики с похожим словом в названии (например TRI*M -12 vs CES -16) — \
+это НЕ расхождение, это две разные метрики. Не сравнивай их.
+- Разные периоды (Q2'25 vs Q4'25) — НЕ расхождение, это эволюция во времени.
+- Разные единицы (% vs руб) — НЕ расхождение.
 
 Отвечай ТОЛЬКО валидным JSON. Без markdown-обёртки.\
 """
@@ -194,22 +203,41 @@ async def _parse_llm_response(
             logger.warning("docs_agent: невалидный JSON | head=%r", raw[:200])
             return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
 
+    # Пост-фильтр: вычищаем артефакты типа [Источник 5] / (Source 7) / [doc:abc]
+    # которые LLM иногда вставляет в free-text вопреки правилам в system prompt.
+    _src_ref_patterns = [
+        re.compile(r"\s*\[Источник\s*\d+(?:\s*\|[^\]]*)?\]", re.IGNORECASE),
+        re.compile(r"\s*\(Источник\s*\d+\)", re.IGNORECASE),
+        re.compile(r"\s*\[Source\s*\d+(?:\s*\|[^\]]*)?\]", re.IGNORECASE),
+        re.compile(r"\s*\(Source\s*\d+\)", re.IGNORECASE),
+        re.compile(r"\s*\[doc:[^\]]+\]"),
+    ]
+
+    def _clean_str(s: str) -> str:
+        for p in _src_ref_patterns:
+            s = p.sub("", s)
+        return re.sub(r"\s+", " ", s).strip()
+
     def _as_str_list(raw):
         # LLM иногда возвращает элементы как dict {statement, source_id} —
-        # схема ждёт строки, приводим вручную.
+        # схема ждёт строки, приводим вручную. Заодно вычищаем артефакты
+        # source-ссылок в свободном тексте.
         out = []
         for w in raw or []:
             if not w:
                 continue
             if isinstance(w, str):
-                out.append(w)
+                cleaned = _clean_str(w)
             elif isinstance(w, dict):
-                out.append(w.get("statement") or w.get("text") or str(w))
+                raw_str = w.get("statement") or w.get("text") or str(w)
+                cleaned = _clean_str(raw_str)
             else:
-                out.append(str(w))
+                cleaned = _clean_str(str(w))
+            if cleaned:
+                out.append(cleaned)
         return out
 
-    answer = data.get("answer", "")
+    answer = _clean_str(data.get("answer", ""))
     hypotheses = _as_str_list(data.get("hypotheses"))
     warnings = _as_str_list(data.get("warnings"))
     requires = _as_str_list(data.get("requires_verification"))

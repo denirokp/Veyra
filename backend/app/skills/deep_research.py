@@ -124,12 +124,18 @@ SYNTHESIS_SYSTEM = """\
 
 Правила:
 1. facts: МИНИМУМ 12-20 пунктов. Покрой ВСЕ темы из блокнота.
-2. Каждый факт — source_id из ФРАГМЕНТОВ. Если точного фрагмента нет —
-   ставь source_id ближайшего релевантного.
-3. answer не повторяет facts.
-4. warnings — все конфликты и риски из блокнота отдельными строками.
-5. НЕ выдумывай. Только из блокнота и фрагментов.
-6. Ответь ТОЛЬКО JSON, без markdown-обёртки.\
+2. Каждый факт — source_id из ФРАГМЕНТОВ (целое число). Если точного
+   фрагмента нет — ставь source_id ближайшего релевантного.
+3. source_id используется ТОЛЬКО внутри объектов facts. В строках
+   answer/hypotheses/warnings/requires_verification ЗАПРЕЩЕНО упоминать
+   "[Источник N]", "Source 5", "(см. 3)" и т.п. Если нужно атрибутировать —
+   пиши название документа словами.
+4. ПРАВИЛА СРАВНЕНИЯ МЕТРИК: помечай "расхождение" в warnings ТОЛЬКО
+   если совпадают имя метрики, период и единица, но значения разные.
+   Разные метрики с похожим словом (TRI*M vs CES) — НЕ расхождение.
+5. answer не повторяет facts.
+6. НЕ выдумывай. Только из блокнота и фрагментов.
+7. Ответь ТОЛЬКО JSON, без markdown-обёртки.\
 """
 
 
@@ -208,6 +214,27 @@ async def _refine_notebook(
     )
 
 
+_SRC_REF_PATTERNS = [
+    re.compile(r"\s*\[Источник\s*\d+(?:\s*\|[^\]]*)?\]", re.IGNORECASE),
+    re.compile(r"\s*\(Источник\s*\d+\)", re.IGNORECASE),
+    re.compile(r"\s*\[Source\s*\d+(?:\s*\|[^\]]*)?\]", re.IGNORECASE),
+    re.compile(r"\s*\(Source\s*\d+\)", re.IGNORECASE),
+    re.compile(r"\s*\[doc:[^\]]+\]"),
+]
+
+
+def _strip_src_refs(value: Any) -> Any:
+    """Вычищает артефакты типа [Источник 5] из строк ответа.
+    source_id допустим только внутри facts.source_id (число)."""
+    if isinstance(value, str):
+        for p in _SRC_REF_PATTERNS:
+            value = p.sub("", value)
+        return re.sub(r"\s+", " ", value).strip()
+    if isinstance(value, list):
+        return [_strip_src_refs(v) for v in value]
+    return value
+
+
 async def _synthesize(query: str, notebook: str, chunks_context: str) -> dict:
     """Финальный шаг: notebook → структурированный ChatResponse."""
     user_msg = (
@@ -221,17 +248,26 @@ async def _synthesize(query: str, notebook: str, chunks_context: str) -> dict:
         messages=[{"role": "user", "content": user_msg}],
         max_tokens=4000,
     )
+    parsed: dict | None = None
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         if match:
             try:
-                return json.loads(match.group())
+                parsed = json.loads(match.group())
             except json.JSONDecodeError:
                 pass
-    logger.warning("deep_research: synthesis JSON parse failed, head=%r", raw[:200])
-    return {"answer": raw, "facts": [], "hypotheses": [], "warnings": [], "requires_verification": []}
+    if not parsed:
+        logger.warning("deep_research: synthesis JSON parse failed, head=%r", raw[:200])
+        return {"answer": raw, "facts": [], "hypotheses": [], "warnings": [], "requires_verification": []}
+
+    # Пост-фильтр source-ссылок в free-text полях
+    parsed["answer"] = _strip_src_refs(parsed.get("answer", ""))
+    parsed["hypotheses"] = _strip_src_refs(parsed.get("hypotheses", []) or [])
+    parsed["warnings"] = _strip_src_refs(parsed.get("warnings", []) or [])
+    parsed["requires_verification"] = _strip_src_refs(parsed.get("requires_verification", []) or [])
+    return parsed
 
 
 async def run_deep_research(
