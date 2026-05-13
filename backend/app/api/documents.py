@@ -13,7 +13,9 @@ from app.models.schemas import DocumentOut, DocumentPatch, DocumentStatus, Docum
 from app.rag.indexer import index_document, reindex_document, SUPPORTED_EXTENSIONS
 from app.settings import settings
 from app.storage.sql_db import (
+    AsyncSession as DbSession,
     create_document,
+    engine,
     get_document,
     list_documents,
     update_document,
@@ -94,7 +96,7 @@ async def upload_document(
         "segment": segment,
         "hierarchy_level": doc.hierarchy_level,
     }
-    background_tasks.add_task(_index_in_background, file_path, doc_id, metadata, db)
+    background_tasks.add_task(_index_in_background, file_path, doc_id, metadata)
 
     return _to_out(doc)
 
@@ -103,15 +105,15 @@ async def _index_in_background(
     file_path: Path,
     doc_id: str,
     metadata: dict,
-    db: AsyncSession,
 ) -> None:
-    try:
-        n_chunks = await index_document(file_path, doc_id, metadata, db)
-        await update_document(db, doc_id, {"chunk_count": n_chunks})
-    except Exception as e:
-        # Логируем ошибку, но не падаем
-        import logging
-        logging.getLogger(__name__).error("Index error doc=%s: %s", doc_id, e)
+    # Request-scoped session уже закрыта когда фон стартует — открываем свою.
+    async with DbSession(engine) as db:
+        try:
+            n_chunks = await index_document(file_path, doc_id, metadata, db)
+            await update_document(db, doc_id, {"chunk_count": n_chunks})
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Index error doc=%s: %s", doc_id, e)
 
 
 @router.get("/documents", response_model=list[DocumentOut])
