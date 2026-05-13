@@ -130,6 +130,8 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
     ChatMode.research: (
         "Это режим РЫНОЧНОГО ИССЛЕДОВАНИЯ. Главное — внешний контекст, "
         "конкуренты, тренды, индустриальные benchmarks.\n\n"
+        "❗ ОТВЕТ ДОЛЖЕН БЫТЬ MARKDOWN-ОТЧЁТОМ 400-800 СЛОВ С H2-СЕКЦИЯМИ "
+        "НИЖЕ. Короткий ответ в одном абзаце НЕ принимается.\n\n"
         "ИСТОЧНИКИ (в порядке приоритета):\n"
         "1. WEB-ИСТОЧНИКИ блок (если есть) — ОБЯЗАТЕЛЬНО используй каждый. "
         "Каждый web-результат должен попасть как минимум в одну hypothesis с "
@@ -667,7 +669,8 @@ async def run(
 
     # full mode требует длинного markdown-отчёта (1500 слов ≈ 2K tokens) + 20 фактов
     # JSON (~2K tokens). 4096 не хватает — поднимаем до 8000 для full.
-    max_tokens = 8000 if mode == ChatMode.full else 4096
+    # Full и Research возвращают длинный markdown + facts JSON — нужен запас.
+    max_tokens = 8000 if mode == ChatMode.full else (6000 if mode == ChatMode.research else 4096)
     try:
         raw = await call_llm(
             system=SYSTEM_PROMPT,

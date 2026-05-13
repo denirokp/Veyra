@@ -165,21 +165,37 @@ def _maybe_english_query(query: str) -> str | None:
         "онбординг": "onboarding",
         "продавцов": "sellers",
         "продавцы": "sellers",
-        "обучени": "training",
+        "продавца": "seller",
+        "продавец": "seller",
+        "обучени\\w*": "training",
         "лучшие практики": "best practices",
         "опыт": "experience",
-        "конкуренты": "competitors",
-        "из мира": "industry",
-        "в мире": "industry global",
-        "как организован": "how to organize",
+        "конкурент\\w*": "competitors",
+        "из мира": "in",
+        "в мире": "global",
+        "как организован\\w*": "how is organized",
         "как делают": "how do",
-        "стратегия": "strategy",
-        "маркетплейс": "marketplace",
-        "бенчмарк": "benchmark",
+        "стратеги\\w*": "strategy",
+        "маркетплейс\\w*": "marketplace",
+        "бенчмарк\\w*": "benchmark",
+        "индустри\\w*": "industry",
+        "примеры": "examples",
+        " в ": " in ",
+        " на ": " on ",
+        " из ": " from ",
+        " по ": " on ",
+        " для ": " for ",
+        " с ": " with ",
+        " и ": " and ",
     }
     en = query
     for ru, en_term in replacements.items():
         en = re.sub(ru, en_term, en, flags=re.IGNORECASE)
+    # Финал: если в строке ещё много кириллицы — возможно перевод не помог.
+    # Считаем кириллические символы — если их >30% — сдаёмся.
+    cyrillic = sum(1 for c in en if "Ѐ" <= c <= "ӿ")
+    if cyrillic / max(1, len(en)) > 0.3:
+        return None
     return en[:300]
 
 
@@ -202,9 +218,11 @@ async def do_research(query: str, max_results: int = 10) -> str:
             seen_urls.add(r["url"])
             all_results.append(r)
 
-    # Дополнительный поиск на английском для международных тем
+    # Дополнительный поиск на английском для международных тем.
+    # Brave free tier лимит 1 req/sec → ждём 1.1 сек перед вторым вызовом.
     en_q = _maybe_english_query(search_q)
     if en_q and en_q != search_q:
+        await asyncio.sleep(1.1)
         en_results = await search(en_q, max_results=max_results)
         for r in en_results:
             if r.get("url") and r["url"] not in seen_urls:
