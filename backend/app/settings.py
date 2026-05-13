@@ -34,5 +34,9 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = ""
     BRAVE_API_KEY: str = ""
 
+    # При bulk-индексации больших корпусов можно отключить дорогие LLM-skills
+    # (logic signals — pairwise сравнение пар документов).
+    DISABLE_LOGIC_SIGNALS: bool = False
+
 
 settings = Settings()

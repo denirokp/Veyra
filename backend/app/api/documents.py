@@ -118,7 +118,10 @@ async def upload_document(
         file_path.unlink(missing_ok=True)
         return _to_out(existing)
 
-    doc_title = title or Path(raw_name).stem or "Без названия"
+    # Чистим имя от управляющих символов и обрезаем чтобы не ломать логи и UI
+    raw_title = title or Path(raw_name).stem or "Без названия"
+    doc_title = (raw_title.replace("\n", " ").replace("\r", " ")
+                          .replace("\t", " ").strip())[:500] or "Без названия"
 
     doc = await create_document(
         db,

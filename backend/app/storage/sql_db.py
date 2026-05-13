@@ -363,6 +363,20 @@ async def init_db() -> None:
             "CREATE INDEX IF NOT EXISTS ix_documents_file_hash ON documents(file_hash)",
             "ALTER TABLE documents ADD COLUMN brief TEXT",
             "ALTER TABLE documents ADD COLUMN parsed_text TEXT",
+            # Hot-path lookups для производительности на 100+ доках:
+            # - chat: подгрузка истории сессии в orchestrator.run
+            # - search_entities_by_query: ILIKE по normalized_name
+            # - list_promises overdue check
+            "CREATE INDEX IF NOT EXISTS ix_chat_messages_session_created "
+            "ON chat_messages(session_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS ix_entities_normalized_name "
+            "ON entities(normalized_name)",
+            "CREATE INDEX IF NOT EXISTS ix_entities_document_id "
+            "ON entities(document_id)",
+            "CREATE INDEX IF NOT EXISTS ix_promises_status_deadline "
+            "ON promises(status, deadline)",
+            "CREATE INDEX IF NOT EXISTS ix_chunks_document_id "
+            "ON chunks(document_id)",
         ):
             try:
                 await conn.exec_driver_sql(stmt)

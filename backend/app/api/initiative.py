@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.skills.initiative_review import run_initiative_review
@@ -10,8 +10,9 @@ router = APIRouter(tags=["initiative"])
 
 
 class InitiativeReviewRequest(BaseModel):
-    title: str
-    text: str
+    # Защита от случайного 10MB body — LLM-контекст разнесёт.
+    title: str = Field(..., min_length=1, max_length=500)
+    text: str = Field(..., max_length=50_000)
 
 
 @router.post("/initiative-review")
