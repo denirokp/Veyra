@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatResponse } from '../types'
@@ -29,6 +30,35 @@ const md = {
     <blockquote className="border-l-2 border-zinc-600 pl-3 my-2 text-zinc-300" {...p} />,
 }
 
+interface CollapsibleProps {
+  title: string
+  count: number
+  colorClass: string  // основной цвет рамки/заголовка
+  bgClass: string     // фоновый цвет
+  textClass: string   // цвет заголовка
+  collapseAfter?: number  // если count > этого числа, по умолчанию свёрнуто
+  children: React.ReactNode
+}
+
+function Collapsible({
+  title, count, colorClass, bgClass, textClass, collapseAfter = 5, children,
+}: CollapsibleProps) {
+  const [open, setOpen] = useState(count <= collapseAfter)
+  return (
+    <section className={`rounded-lg border ${colorClass} ${bgClass} p-3`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wider ${textClass} hover:opacity-80 transition-opacity`}
+      >
+        <span>{title} · {count}</span>
+        <span className="opacity-60">{open ? '⌃ свернуть' : '⌄ показать'}</span>
+      </button>
+      {open && <div className="mt-2">{children}</div>}
+    </section>
+  )
+}
+
 export function AssistantMessage({ content, response }: Props) {
   if (!response) {
     return (
@@ -42,19 +72,23 @@ export function AssistantMessage({ content, response }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Прямой ответ — теперь поддерживает markdown (заголовки, списки, таблицы) */}
+      {/* Прямой ответ — markdown */}
       <div className="text-zinc-100 leading-relaxed">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>
           {response.answer}
         </ReactMarkdown>
       </div>
 
-      {/* Факты */}
+      {/* Факты — сворачиваемые если их много */}
       {facts.length > 0 && (
-        <section className="rounded-lg border border-blue-800/60 bg-blue-950/30 p-3 space-y-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-            Факты из документов
-          </h4>
+        <Collapsible
+          title="📎 Источники"
+          count={facts.length}
+          colorClass="border-blue-800/60"
+          bgClass="bg-blue-950/30"
+          textClass="text-blue-400"
+          collapseAfter={5}
+        >
           <ul className="space-y-2.5">
             {facts.map((f, i) => (
               <li key={i} className="text-sm text-zinc-200 leading-snug">
@@ -66,31 +100,37 @@ export function AssistantMessage({ content, response }: Props) {
               </li>
             ))}
           </ul>
-        </section>
+        </Collapsible>
       )}
 
-      {/* Предупреждения — показываем раньше гипотез, они важнее */}
+      {/* Предупреждения — обычно мало, но если много — свернём */}
       {warnings.length > 0 && (
-        <section className="rounded-lg border border-yellow-800/60 bg-yellow-950/30 p-3 space-y-1.5">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-yellow-400">
-            ⚡ Расхождения и риски
-          </h4>
+        <Collapsible
+          title="⚡ Расхождения и риски"
+          count={warnings.length}
+          colorClass="border-yellow-800/60"
+          bgClass="bg-yellow-950/30"
+          textClass="text-yellow-400"
+          collapseAfter={4}
+        >
           <ul className="space-y-1">
             {warnings.map((w, i) => (
-              <li key={i} className="text-sm text-yellow-200 leading-snug">
-                {w}
-              </li>
+              <li key={i} className="text-sm text-yellow-200 leading-snug">{w}</li>
             ))}
           </ul>
-        </section>
+        </Collapsible>
       )}
 
       {/* Гипотезы */}
       {hypotheses.length > 0 && (
-        <section className="rounded-lg border border-purple-800/60 bg-purple-950/30 p-3 space-y-1.5">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-purple-400">
-            Гипотезы (нет в документах)
-          </h4>
+        <Collapsible
+          title="Гипотезы (вне документов)"
+          count={hypotheses.length}
+          colorClass="border-purple-800/60"
+          bgClass="bg-purple-950/30"
+          textClass="text-purple-400"
+          collapseAfter={4}
+        >
           <ul className="space-y-1">
             {hypotheses.map((h, i) => (
               <li key={i} className="text-sm text-zinc-300 leading-snug">
@@ -99,15 +139,19 @@ export function AssistantMessage({ content, response }: Props) {
               </li>
             ))}
           </ul>
-        </section>
+        </Collapsible>
       )}
 
-      {/* Требует проверки — теперь это "что не учтено" */}
+      {/* Что стоит проверить */}
       {requires_verification.length > 0 && (
-        <section className="rounded-lg border border-orange-800/60 bg-orange-950/30 p-3 space-y-1.5">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-orange-400">
-            🔍 Что стоит проверить
-          </h4>
+        <Collapsible
+          title="🔍 Что стоит проверить"
+          count={requires_verification.length}
+          colorClass="border-orange-800/60"
+          bgClass="bg-orange-950/30"
+          textClass="text-orange-400"
+          collapseAfter={4}
+        >
           <ul className="space-y-1">
             {requires_verification.map((r, i) => (
               <li key={i} className="text-sm text-orange-200 leading-snug">
@@ -116,12 +160,12 @@ export function AssistantMessage({ content, response }: Props) {
               </li>
             ))}
           </ul>
-        </section>
+        </Collapsible>
       )}
 
       {/* Метаданные — минимально */}
       <div className="flex gap-3 text-xs text-zinc-600">
-        <span>{metadata.chunks_retrieved} источников</span>
+        <span>{metadata.chunks_retrieved} чанков</span>
         <span>{metadata.latency_ms}ms</span>
       </div>
     </div>
