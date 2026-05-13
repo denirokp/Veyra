@@ -25,5 +25,8 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
 
+    # CORS — список origin'ов через запятую. По умолчанию только локальный фронт.
+    CORS_ORIGINS: str = "http://localhost:5173"
+
 
 settings = Settings()

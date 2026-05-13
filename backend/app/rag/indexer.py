@@ -144,38 +144,35 @@ async def reindex_document(
     new_status: str,
     db: AsyncSession,
 ) -> None:
-    """Перемещает чанки между коллекциями при смене статуса."""
-    from sqlalchemy import select
-    from app.storage.sql_db import Chunk as ChunkRow, Document
+    """Перемещает чанки между коллекциями при смене статуса БЕЗ пересчёта
+    эмбеддингов — забираем существующие векторы из Chroma и переcaем их в
+    нужную коллекцию с обновлённой metadata."""
+    target_collection = (
+        None if new_status == "superseded" else _collection_for_status(new_status)
+    )
+
+    # Собираем все чанки документа из обеих исходных коллекций (может быть в любой).
+    existing: list[dict] = []
+    for src in ("actual", "archive"):
+        existing.extend(vector_db.get_document_chunks(document_id, src))
 
     # Удаляем из обеих коллекций
     vector_db.delete_document_chunks(document_id, "actual")
     vector_db.delete_document_chunks(document_id, "archive")
 
-    if new_status == "superseded":
-        return  # superseded не индексируется
-
-    # Получаем чанки и переиндексируем
-    result = await db.execute(
-        select(ChunkRow).where(ChunkRow.document_id == document_id)
-    )
-    chunk_rows = list(result.scalars().all())
-    if not chunk_rows:
-        return
-
-    texts = [c.content for c in chunk_rows]
-    embeddings = await embed(texts)
-    collection = _collection_for_status(new_status)
+    if not target_collection or not existing:
+        return  # superseded не индексируется, либо чанков нет
 
     vector_db.upsert_chunks(
         [
             {
-                "id": c.id,
-                "content": c.content,
-                "embedding": embeddings[i],
-                "metadata": {**(c.metadata_ or {}), "status": new_status},
+                "id": c["id"],
+                "content": c["content"],
+                "embedding": c["embedding"],
+                "metadata": {**(c.get("metadata") or {}), "status": new_status},
             }
-            for i, c in enumerate(chunk_rows)
+            for c in existing
+            if c.get("embedding") is not None
         ],
-        collection_name=collection,
+        collection_name=target_collection,
     )

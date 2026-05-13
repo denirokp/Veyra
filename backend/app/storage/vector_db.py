@@ -74,3 +74,24 @@ def query_chunks(
 def delete_document_chunks(document_id: str, collection_name: str = "actual") -> None:
     col = get_collection(collection_name)
     col.delete(where={"document_id": document_id})
+
+
+def get_document_chunks(
+    document_id: str, collection_name: str = "actual"
+) -> list[dict[str, Any]]:
+    """Вернёт все чанки документа с embeddings — для миграции между коллекциями
+    без пересчёта эмбеддингов."""
+    col = get_collection(collection_name)
+    result = col.get(
+        where={"document_id": document_id},
+        include=["documents", "metadatas", "embeddings"],
+    )
+    items: list[dict[str, Any]] = []
+    for i, chunk_id in enumerate(result.get("ids", []) or []):
+        items.append({
+            "id": chunk_id,
+            "content": (result.get("documents") or [None])[i],
+            "metadata": (result.get("metadatas") or [{}])[i] or {},
+            "embedding": (result.get("embeddings") or [None])[i],
+        })
+    return items

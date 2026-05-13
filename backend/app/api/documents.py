@@ -147,6 +147,9 @@ async def upload_document(
     }
     background_tasks.add_task(_index_in_background, file_path, doc_id, metadata)
 
+    from app.api.docs import invalidate_stats_cache
+    invalidate_stats_cache()
+
     return _to_out(doc)
 
 
@@ -229,5 +232,8 @@ async def delete_doc(doc_id: str, db: AsyncSession = Depends(get_session)):
         except OSError:
             # Не критично — оставшийся файл не ломает работу системы
             pass
+
+    from app.api.docs import invalidate_stats_cache
+    invalidate_stats_cache()
 
     return {"deleted": doc_id}

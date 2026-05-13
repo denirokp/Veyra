@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,9 +10,19 @@ from app.storage.sql_db import Document, NumericContradiction, LogicSignal, Prom
 
 router = APIRouter(tags=["docs"])
 
+# In-memory кэш /docs/stats — фронт поллит его раз в секунду, а внутри 6 COUNT'ов
+# по SQLite. TTL 10 секунд — небольшое отставание (бары обновятся не моментально),
+# зато нагрузка на БД падает на порядок.
+_stats_cache: dict = {"data": None, "expires_at": 0.0}
+_STATS_TTL = 10.0
+
 
 @router.get("/docs/stats")
 async def docs_stats(db: AsyncSession = Depends(get_session)):
+    now = time.monotonic()
+    if _stats_cache["data"] is not None and now < _stats_cache["expires_at"]:
+        return _stats_cache["data"]
+
     total = (await db.execute(select(func.count(Document.id)))).scalar()
     by_status = {}
     for status in ("actual", "draft", "archived", "superseded", "unknown"):
@@ -45,7 +57,7 @@ async def docs_stats(db: AsyncSession = Depends(get_session)):
         )
     ).scalar()
 
-    return {
+    payload = {
         "total_documents": total,
         "by_status": by_status,
         "anchor_documents": anchors,
@@ -53,6 +65,15 @@ async def docs_stats(db: AsyncSession = Depends(get_session)):
         "open_logic_signals": open_logic,
         "open_promises": open_promises,
     }
+    _stats_cache["data"] = payload
+    _stats_cache["expires_at"] = now + _STATS_TTL
+    return payload
+
+
+def invalidate_stats_cache() -> None:
+    """Сбрасывает кэш — вызывается при upload/delete документа."""
+    _stats_cache["data"] = None
+    _stats_cache["expires_at"] = 0.0
 
 
 @router.get("/docs/gaps")

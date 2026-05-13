@@ -35,9 +35,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Хроника API", version="0.1.0", lifespan=lifespan)
 
+from app.settings import settings as _settings
+_cors_origins = [o.strip() for o in _settings.CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
