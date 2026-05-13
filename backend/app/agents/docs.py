@@ -561,6 +561,20 @@ async def run(
     else:
         knowledge_section = ""
 
+    # Web search — для full mode если запрос требует «внешнего опыта» И
+    # настроен один из API-ключей (Tavily/Brave). Тихо пропускается иначе.
+    web_section = ""
+    if mode == ChatMode.full:
+        try:
+            from app.skills.web_research import should_do_web_search, do_research
+            if should_do_web_search(message):
+                web_block = await do_research(message, max_results=5)
+                if web_block:
+                    web_section = "\n\n" + web_block + "\n"
+                    logger.info("web_research: injected %d chars", len(web_block))
+        except Exception as exc:
+            logger.warning("web_research error (skipping): %s", exc)
+
     # История диалога — для follow-up'ов и местоимений
     history_section = ""
     if history:
@@ -592,6 +606,7 @@ async def run(
         + (f"{style_hint}\n" if style_hint else "")
         + history_section
         + knowledge_section
+        + web_section
         + f"\nФРАГМЕНТЫ ДОКУМЕНТОВ (для точных цитат с source_id):\n{context}"
         + (f"\n\n{entity_block}" if entity_block else "")
         + extra_context

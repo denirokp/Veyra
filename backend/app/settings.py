@@ -28,5 +28,11 @@ class Settings(BaseSettings):
     # CORS — список origin'ов через запятую. По умолчанию только локальный фронт.
     CORS_ORIGINS: str = "http://localhost:5173"
 
+    # Web search — опционально, для "внешнего опыта" в full-mode ответах.
+    # Активируется только если задан один из ключей. Tavily приоритетнее
+    # (лучше для research-задач). Brave дешевле/бесплатнее на низких объёмах.
+    TAVILY_API_KEY: str = ""
+    BRAVE_API_KEY: str = ""
+
 
 settings = Settings()
