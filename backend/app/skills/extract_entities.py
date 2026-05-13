@@ -121,6 +121,7 @@ async def extract_entities_from_text(text: str) -> list[dict]:
             e.get("type", "other"),
             (e.get("normalized_name") or e["name"]).lower().strip(),
             str(e.get("value") or "").strip(),
+            str(e.get("date_context") or "").strip(),
         )
         if key in seen:
             continue

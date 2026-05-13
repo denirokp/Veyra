@@ -88,18 +88,28 @@ async def index_document(
     5. Сохранение чанков в SQLite
     6. Skills: extract_entities, track_promises
     """
-    text = parse_text(file_path)
-    chunks: list[Chunk] = chunk_document(text, document_metadata)
+    import logging as _logging
+    import time as _time
+    _log = _logging.getLogger(__name__)
+    _t0 = _time.monotonic()
 
+    text = parse_text(file_path)
+    _log.info("index doc=%s parse %.2fs, %d chars", document_id, _time.monotonic() - _t0, len(text))
+
+    _tc = _time.monotonic()
+    chunks: list[Chunk] = chunk_document(text, document_metadata)
     if not chunks:
         return 0
+    _log.info("index doc=%s chunk %.2fs, %d chunks", document_id, _time.monotonic() - _tc, len(chunks))
 
     # Батчинг эмбеддингов (не более 100 за раз)
+    _te = _time.monotonic()
     batch_size = 100
     embeddings: list[list[float]] = []
     for i in range(0, len(chunks), batch_size):
         batch_texts = [c.content for c in chunks[i : i + batch_size]]
         embeddings.extend(await embed(batch_texts))
+    _log.info("index doc=%s embed %.2fs", document_id, _time.monotonic() - _te)
 
     collection_name = _collection_for_status(document_metadata.get("status", "unknown"))
 

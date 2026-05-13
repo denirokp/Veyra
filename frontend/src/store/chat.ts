@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { v4 as uuidv4 } from 'uuid'
 import { sendChat, uploadDocument, reviewInitiative } from '../api/client'
 import { queryClient } from '../queryClient'
@@ -49,7 +50,7 @@ async function readFileText(file: File): Promise<string> {
   })
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(persist((set, get) => ({
   messages: [],
   loading: false,
   uploading: false,
@@ -164,4 +165,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }))
     }
   },
+}), {
+  name: 'khronika-chat',
+  storage: createJSONStorage(() => localStorage),
+  // Не персистим runtime-флаги — только историю и выбор режима.
+  partialize: (state) => ({
+    messages: state.messages,
+    mode: state.mode,
+    sessionId: state.sessionId,
+  }),
 }))

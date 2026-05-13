@@ -207,6 +207,45 @@ async def patch_doc(
     return _to_out(doc)
 
 
+@router.post("/documents/{doc_id}/reindex", response_model=DocumentOut)
+async def reindex_doc(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_session),
+):
+    """Перезапустить индексацию документа — например после правки парсера
+    или если предыдущий прогон упал. Очищает старые чанки из Chroma и SQL
+    и стартует новую индексацию по сохранённому файлу на диске."""
+    from app.storage import vector_db
+    from sqlalchemy import delete
+    from app.storage.sql_db import Chunk as ChunkRow
+
+    doc = await get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Документ не найден")
+    if not doc.file_path or not Path(doc.file_path).exists():
+        raise HTTPException(409, "Файл документа недоступен на диске")
+
+    # Чистим только чанки и связанные индексы — сам Document, entities,
+    # promises и contradictions оставляем (они частично могут быть useful).
+    vector_db.delete_document_chunks(doc_id, "actual")
+    vector_db.delete_document_chunks(doc_id, "archive")
+    await db.execute(delete(ChunkRow).where(ChunkRow.document_id == doc_id))
+    await update_document(db, doc_id, {"chunk_count": 0})
+    await db.commit()
+
+    metadata = {
+        "document_id": doc_id,
+        "title": doc.title,
+        "status": doc.status,
+        "segment": doc.segment,
+        "hierarchy_level": doc.hierarchy_level,
+    }
+    background_tasks.add_task(_index_in_background, Path(doc.file_path), doc_id, metadata)
+
+    return _to_out(doc)
+
+
 @router.delete("/documents/{doc_id}")
 async def delete_doc(doc_id: str, db: AsyncSession = Depends(get_session)):
     from app.storage import vector_db
