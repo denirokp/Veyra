@@ -56,9 +56,31 @@ def _chunk_docs_for_comparison(docs_with_chunks: list[dict]) -> str:
     for i, d in enumerate(docs_with_chunks):
         parts.append(
             f"[Документ {i} | {d['title']} | {d['status']} | L{d['hierarchy_level']} | {d.get('created_at', '')}]\n"
-            f"{d['content'][:1500]}"
+            f"{d['content']}"
         )
     return "\n\n---\n\n".join(parts)
+
+
+async def _comparison_text(db: AsyncSession, doc_obj) -> str:
+    """Текст документа для попарного сравнения.
+
+    Приоритет — document brief (сжатый обзор ВСЕГО документа). Раньше
+    бралось 1500 символов первого чанка — этого мало: реальные
+    противоречия живут в FAQ и приложениях, не во вступлении (ТЗ v1.4
+    §13.7). Если брифа нет — фолбэк на склейку первых чанков.
+    """
+    from sqlalchemy import select as _select
+
+    brief = (getattr(doc_obj, "brief", None) or "").strip()
+    if brief:
+        return brief[:8000]
+    rows = await db.execute(
+        _select(Chunk.content)
+        .where(Chunk.document_id == doc_obj.id)
+        .order_by(Chunk.chunk_index.asc())
+        .limit(6)
+    )
+    return "\n\n".join(c for (c,) in rows.fetchall() if c)[:8000]
 
 
 async def _find_signals_in_pair(doc_a: dict, doc_b: dict) -> list[dict]:
@@ -98,51 +120,42 @@ async def find_logic_signals_for_document(
         logger.info("logic_signals: пропущено (DISABLE_LOGIC_SIGNALS)")
         return []
 
-    new_result = await db.execute(
-        select(Document, Chunk.content)
-        .join(Chunk, Chunk.document_id == Document.id)
-        .where(Document.id == new_doc_id, Chunk.chunk_index == 0)
-    )
-    new_row = new_result.first()
-    if not new_row:
+    new_doc_obj = (
+        await db.execute(select(Document).where(Document.id == new_doc_id))
+    ).scalar_one_or_none()
+    if new_doc_obj is None:
         return []
 
-    new_doc_obj, new_content = new_row
     new_doc = {
         "id": new_doc_id,
         "title": new_doc_obj.title,
         "status": new_doc_obj.status,
         "hierarchy_level": new_doc_obj.hierarchy_level or 5,
         "created_at": str(new_doc_obj.created_at or ""),
-        "content": new_content,
+        "content": await _comparison_text(db, new_doc_obj),
     }
 
-    existing_result = await db.execute(
-        select(Document, Chunk.content)
-        .join(Chunk, Chunk.document_id == Document.id)
-        .where(
-            Document.status == "actual",
-            Document.id != new_doc_id,
-            Chunk.chunk_index == 0,
+    existing_objs = (
+        await db.execute(
+            select(Document)
+            .where(Document.status == "actual", Document.id != new_doc_id)
+            .order_by(Document.hierarchy_level.asc())
+            .limit(max_comparisons)
         )
-        .order_by(Document.hierarchy_level.asc())
-        .limit(max_comparisons)
-    )
-    existing_rows = existing_result.fetchall()
-
-    if not existing_rows:
+    ).scalars().all()
+    if not existing_objs:
         return []
 
     existing_docs = [
         {
-            "id": doc_obj.id,
-            "title": doc_obj.title,
-            "status": doc_obj.status,
-            "hierarchy_level": doc_obj.hierarchy_level or 5,
-            "created_at": str(doc_obj.created_at or ""),
-            "content": content,
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "hierarchy_level": d.hierarchy_level or 5,
+            "created_at": str(d.created_at or ""),
+            "content": await _comparison_text(db, d),
         }
-        for doc_obj, content in existing_rows
+        for d in existing_objs
     ]
 
     # Параллельно опрашиваем все пары
@@ -183,25 +196,22 @@ async def find_logic_signals_on_demand(
     """
     По явному запросу — анализируем документы из результатов RAG-поиска.
     """
-    result = await db.execute(
-        select(Document, Chunk.content)
-        .join(Chunk, Chunk.document_id == Document.id)
-        .where(Document.id.in_(query_docs), Chunk.chunk_index == 0)
-    )
-    rows = result.fetchall()
-    if len(rows) < 2:
+    objs = (
+        await db.execute(select(Document).where(Document.id.in_(query_docs)))
+    ).scalars().all()
+    if len(objs) < 2:
         return []
 
     doc_list = [
         {
-            "id": r[0].id,
-            "title": r[0].title,
-            "status": r[0].status,
-            "hierarchy_level": r[0].hierarchy_level or 5,
-            "created_at": str(r[0].created_at or ""),
-            "content": r[1],
+            "id": d.id,
+            "title": d.title,
+            "status": d.status,
+            "hierarchy_level": d.hierarchy_level or 5,
+            "created_at": str(d.created_at or ""),
+            "content": await _comparison_text(db, d),
         }
-        for r in rows
+        for d in objs
     ]
 
     pairs = list(combinations(doc_list, 2))
