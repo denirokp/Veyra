@@ -183,7 +183,19 @@ async def _run_agent_loop(
     ответ либо пока не исчерпан лимит итераций. Возвращает
     (raw_text, warnings, tools_used). registry мутируется внутри _dispatch_tool."""
     llm = get_llm()
-    messages: list[dict] = [{"role": "user", "content": first_user_message}]
+    # Кэшируем статичный префикс (системный промпт + первичный корпусный
+    # контекст): в tool-use loop он переотправляется на каждой итерации.
+    system_blocks = [
+        {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+    ]
+    messages: list[dict] = [{
+        "role": "user",
+        "content": [{
+            "type": "text",
+            "text": first_user_message,
+            "cache_control": {"type": "ephemeral"},
+        }],
+    }]
     tools_used: set[str] = set()
     final_text = ""
 
@@ -191,7 +203,7 @@ async def _run_agent_loop(
         response = await llm.messages.create(
             model=settings.LLM_MODEL,
             max_tokens=4096,
-            system=system,
+            system=system_blocks,
             tools=_TOOLS,
             messages=messages,
         )
@@ -221,7 +233,7 @@ async def _run_agent_loop(
         response = await llm.messages.create(
             model=settings.LLM_MODEL,
             max_tokens=4096,
-            system=system,
+            system=system_blocks,
             tools=_TOOLS,
             tool_choice={"type": "none"},
             messages=messages,
@@ -247,9 +259,11 @@ async def _parse_llm_response(
         data = json.loads(raw)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
+        if not match:
+            return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
+        try:
             data = json.loads(match.group())
-        else:
+        except json.JSONDecodeError:
             return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
 
     answer = data.get("answer", "")
@@ -301,9 +315,10 @@ async def run(
     file_content: str | None = None,
     db: AsyncSession | None = None,
 ) -> dict:
-    # Первичный retrieval; реестр источников дальше пополняется агентом через
-    # инструмент search_corpus (включая архив по необходимости).
-    initial = await retrieve(message, top_k=15, include_archive=False)
+    # Первичный retrieval включает архив (recall по умолчанию); архивные
+    # чанки штрафуются hierarchy boost и помечаются warning'ом. Реестр
+    # источников дальше пополняется агентом через инструмент search_corpus.
+    initial = await retrieve(message, top_k=15, include_archive=True)
     registry: list[RetrievedChunk] = list(initial)
 
     # Entity memory — обогащаем контекст релевантными сущностями
