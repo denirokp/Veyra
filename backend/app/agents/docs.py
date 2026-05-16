@@ -258,6 +258,15 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
 }
 
 
+# Режимы, которым нужен ВЕСЬ корпус, а не только retrieve-чанки. Поиск
+# числовых/логических расхождений и обещаний по top-15 чанкам слепнет:
+# нужная цифра/цитата часто не попадает в retrieval. Если корпус влезает
+# в контекст — подаём LLM полные тексты документов целиком.
+_FULL_CONTEXT_MODES = frozenset({
+    ChatMode.full, ChatMode.contradictions, ChatMode.promises, ChatMode.gaps,
+})
+
+
 def _build_context(chunks: list[RetrievedChunk]) -> str:
     # Сортируем чанки так чтобы фрагменты ОДНОГО документа шли подряд.
     # Без этого LLM может перепутать source_id между документами (фрагменты
@@ -545,7 +554,7 @@ async def run(
     #      финальный ответ, минуя обычный LLM-вызов в этой функции.
     doc_briefs_block = ""
     full_texts_block = ""
-    if mode == ChatMode.full and db is not None:
+    if mode in _FULL_CONTEXT_MODES and db is not None:
         FULL_TEXTS_BUDGET = 120_000
 
         from app.storage.sql_db import (
@@ -569,9 +578,13 @@ async def run(
             briefs = await get_all_document_briefs(db, statuses=["actual"], limit=500)
             briefs_total = sum(len(b) for _, b in briefs)
 
-            # Стратегия 3: корпус большой — переходим в deep_research
+            # Стратегия 3: корпус большой — переходим в deep_research.
+            # Только для full-режима: contradictions/promises/gaps не должны
+            # уходить в deep_research-ветку с ранним return.
             DEEP_DOC_THRESHOLD = 20
-            if len(briefs) > DEEP_DOC_THRESHOLD or briefs_total > 100_000:
+            if mode == ChatMode.full and (
+                len(briefs) > DEEP_DOC_THRESHOLD or briefs_total > 100_000
+            ):
                 from app.skills.deep_research import run_deep_research
                 logger.info("full-mode: switching to deep_research (%d docs, %d brief chars)",
                             len(briefs), briefs_total)

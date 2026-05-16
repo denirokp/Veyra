@@ -206,7 +206,9 @@ async def index_document(
         ("find_logic_signals", find_logic_signals_for_document(document_id, db)),
     ) or ()):
         try:
-            await coro
+            _res = await coro
+            _n = len(_res) if isinstance(_res, (list, tuple, dict)) else _res
+            _log.info("skill %s doc=%s → %s", skill_name, document_id, _n)
         except Exception as exc:
             _log.exception("skill %s failed for doc=%s: %s", skill_name, document_id, exc)
 
