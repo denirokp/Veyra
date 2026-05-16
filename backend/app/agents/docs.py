@@ -495,6 +495,7 @@ async def run(
     db: AsyncSession | None = None,
     history=None,
     style: str = "report",
+    force_retrieval: bool = False,
 ) -> dict:
     # Поиск релевантных чанков — для full режима берём больше материала,
     # чтобы LLM мог достать конкретные числа и атрибуцию.
@@ -555,7 +556,7 @@ async def run(
     #      финальный ответ, минуя обычный LLM-вызов в этой функции.
     doc_briefs_block = ""
     full_texts_block = ""
-    if mode in _FULL_CONTEXT_MODES and db is not None:
+    if mode in _FULL_CONTEXT_MODES and db is not None and not force_retrieval:
         # 200K символов ≈ 50K токенов — с запасом влезает в 200K-контекст
         # Claude вместе с system-промптом, чанками и entity-memory.
         FULL_TEXTS_BUDGET = 200_000

@@ -55,6 +55,9 @@ class ChatRequest(BaseModel):
     mode: Optional[ChatMode] = None
     file: Optional[str] = None  # base64
     session_id: Optional[UUID] = None
+    # Фаза 1.5 (retrieval-гейт): принудительно гнать через retrieval-путь,
+    # минуя подачу полных текстов — чтобы проверить прод-режим на масштабе.
+    force_retrieval: bool = False
 
 
 class DocumentPatch(BaseModel):

@@ -265,6 +265,7 @@ async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
             db=db,
             history=history,
             style=intent.style,
+            force_retrieval=request.force_retrieval,
         )
 
     latency_ms = int((time.monotonic() - t0) * 1000)
