@@ -10,6 +10,7 @@ from app.clients import embed
 from app.rag.chunker import Chunk, chunk_document
 from app.storage import vector_db
 from app.storage.sql_db import save_chunks
+from app.settings import settings as _settings
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html"}
@@ -31,6 +32,54 @@ def _strip_html(raw: str) -> str:
     return text.strip()
 
 
+def _render_table_rows(rows):
+    """Строки таблицы построчно в Markdown — ячейки через |. Сохраняет
+    привязку метрика->значение внутри строки чанка."""
+    norm = []
+    for row in rows:
+        cells = [" ".join(str(cell or "").split()) for cell in row]
+        if not any(cells):
+            continue
+        norm.append("| " + " | ".join(cells) + " |")
+    if not norm:
+        return ""
+    if len(norm) > 1:
+        n_cols = norm[0].count("|") - 1
+        norm.insert(1, "| " + " | ".join(["---"] * n_cols) + " |")
+    return "\n".join(norm)
+
+
+def _parse_docx(file_path):
+    """Table-aware .docx. docx.paragraphs не включает текст таблиц — обходим
+    тело документа по порядку, таблицы рендерим построчно."""
+    import docx as python_docx
+    from docx.oxml.table import CT_Tbl
+    from docx.oxml.text.paragraph import CT_P
+    from docx.table import Table as _DocxTable
+    from docx.text.paragraph import Paragraph as _DocxParagraph
+    doc = python_docx.Document(file_path)
+    blocks = []
+    for child in doc.element.body.iterchildren():
+        if isinstance(child, CT_P):
+            para = _DocxParagraph(child, doc)
+            t = para.text.strip()
+            if not t:
+                continue
+            style = para.style.name if para.style else ""
+            tail = style.split()[-1] if style else ""
+            if style.startswith("Heading") and tail.isdigit():
+                blocks.append("#" * int(tail) + " " + t)
+            else:
+                blocks.append(t)
+        elif isinstance(child, CT_Tbl):
+            rendered = _render_table_rows(
+                [[cell.text for cell in row.cells] for row in _DocxTable(child, doc).rows]
+            )
+            if rendered:
+                blocks.append(rendered)
+    return "\n\n".join(blocks)
+
+
 def parse_text(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
@@ -39,27 +88,7 @@ def parse_text(file_path: Path) -> str:
             pages = [p.extract_text() or "" for p in pdf.pages]
         return "\n\n".join(pages)
     if suffix == ".docx":
-        import docx as python_docx
-        doc = python_docx.Document(file_path)
-        parts: list[str] = []
-        for para in doc.paragraphs:
-            if not para.text.strip():
-                continue
-            if para.style.name.startswith("Heading"):
-                level = para.style.name.split()[-1]
-                try:
-                    parts.append(f"{'#' * int(level)} {para.text}")
-                except ValueError:
-                    parts.append(para.text)
-            else:
-                parts.append(para.text)
-        # Таблицы — бизнес-цифры часто в них (целевая аудитория, метрики, KPI).
-        for table in doc.tables:
-            for row in table.rows:
-                cells = [c.text.strip() for c in row.cells if c.text.strip()]
-                if cells:
-                    parts.append(" | ".join(cells))
-        return "\n\n".join(parts)
+        return _parse_docx(file_path)
     if suffix in (".md", ".txt"):
         return file_path.read_text(encoding="utf-8", errors="replace")
     if suffix == ".html":
@@ -171,11 +200,11 @@ async def index_document(
     from app.skills.document_brief import generate_document_brief
     from app.storage.sql_db import update_document as _update_document
 
-    for skill_name, coro in (
+    for skill_name, coro in (_settings.ENABLE_BACKGROUND_SIGNALS and (
         ("extract_entities", extract_and_save(text, document_id, document_metadata, db)),
         ("track_promises", extract_and_save_promises(text, document_id, document_metadata, db)),
         ("find_logic_signals", find_logic_signals_for_document(document_id, db)),
-    ):
+    ) or ()):
         try:
             await coro
         except Exception as exc:
@@ -187,7 +216,7 @@ async def index_document(
     _tb = _time.monotonic()
     try:
         title = document_metadata.get("title") or "Документ"
-        brief = await generate_document_brief(text, title)
+        brief = await generate_document_brief(text, title) if _settings.ENABLE_BACKGROUND_SIGNALS else ""
         if brief:
             await _update_document(db, document_id, {"brief": brief})
             _log.info("index doc=%s brief %.2fs, %d chars",
