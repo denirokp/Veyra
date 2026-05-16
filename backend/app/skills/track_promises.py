@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import call_llm
+from app.clients import call_llm, parse_json_array
 from app.storage.sql_db import save_promises
 
 logger = logging.getLogger(__name__)
@@ -44,23 +44,11 @@ MAX_CHUNKS = 8
 
 
 def _parse_json_array(raw: str, source_label: str) -> list[dict]:
-    try:
-        data = json.loads(raw)
-        if isinstance(data, list):
-            return data
-        logger.warning("promises/%s: ожидался JSON array, получено %s", source_label, type(data).__name__)
-        return []
-    except json.JSONDecodeError:
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError as e:
-                logger.warning("promises/%s: regex-fallback не распарсился: %s | head=%r",
-                               source_label, e, raw[:200])
-                return []
-        logger.warning("promises/%s: невалидный JSON, [] | head=%r", source_label, raw[:200])
-        return []
+    result = parse_json_array(raw)
+    if not result:
+        logger.warning("promises/%s: ни одного объекта не распарсилось | head=%r",
+                        source_label, raw[:200])
+    return result
 
 
 def _chunk_text(text: str) -> list[str]:
@@ -101,7 +89,7 @@ async def extract_promises_from_text(
             raw = await call_llm(
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_content}],
-                max_tokens=2500,
+                max_tokens=4096,
             )
         except Exception as e:
             logger.error("promises chunk %d/%d failed: %s", i + 1, len(chunks), e)

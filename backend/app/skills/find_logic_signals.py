@@ -11,7 +11,7 @@ from itertools import combinations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import call_llm
+from app.clients import call_llm, parse_json_array
 from app.storage.sql_db import Chunk, Document, save_logic_signals
 
 logger = logging.getLogger(__name__)
@@ -68,18 +68,16 @@ async def _find_signals_in_pair(doc_a: dict, doc_b: dict) -> list[dict]:
         raw = await call_llm(
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
-            max_tokens=2048,
+            max_tokens=4096,
         )
     except Exception as e:
         logger.error("logic_signals pair (%s × %s): LLM call failed: %s",
                      doc_a.get("id", "?")[:8], doc_b.get("id", "?")[:8], e)
         return []
-    try:
-        signals = json.loads(raw)
-        return [s for s in signals if isinstance(s, dict) and s.get("confidence", 0) >= 0.6]
-    except json.JSONDecodeError as e:
-        logger.warning("logic_signals pair: невалидный JSON: %s | head=%r", e, raw[:200])
-        return []
+    signals = parse_json_array(raw)
+    if not signals:
+        logger.warning("logic_signals pair: ни одного объекта не распарсилось | head=%r", raw[:200])
+    return [s for s in signals if s.get("confidence", 0) >= 0.6]
 
 
 def _signals_enabled() -> bool:

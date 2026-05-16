@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import random
+import re
 from typing import Awaitable, Callable, TypeVar
 
 import openai
@@ -123,6 +125,51 @@ async def call_llm(
         return (response.choices[0].message.content or "").strip()
 
     return await _with_retry(_call, label="llm")
+
+
+def parse_json_array(raw: str) -> list[dict]:
+    """Толерантный парсер JSON-массива объектов из LLM-ответа.
+
+    Терпит три типичные болезни LLM-вывода:
+    1. markdown-обёртку ```json ... ``` (модель игнорирует "без markdown");
+    2. поясняющий текст до/после массива;
+    3. обрыв ответа по лимиту токенов — тогда закрывающей ] нет, и мы
+       собираем все целые объекты по отдельности (объекты skill-ответов
+       плоские, без вложенных {}), теряя только последний неполный.
+    """
+    if not raw:
+        return []
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text).strip()
+
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict)]
+    except json.JSONDecodeError:
+        pass
+
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group())
+            if isinstance(data, list):
+                return [x for x in data if isinstance(x, dict)]
+        except json.JSONDecodeError:
+            pass
+
+    # Спасение оборванного ответа — объект за объектом.
+    out: list[dict] = []
+    for obj in re.findall(r"\{[^{}]*\}", text, re.DOTALL):
+        try:
+            parsed = json.loads(obj)
+            if isinstance(parsed, dict):
+                out.append(parsed)
+        except json.JSONDecodeError:
+            continue
+    return out
 
 
 # ── Backward-compat ──────────────────────────────────────────────────────────

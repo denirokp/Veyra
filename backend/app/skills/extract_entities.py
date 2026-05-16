@@ -17,7 +17,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import call_llm
+from app.clients import call_llm, parse_json_array
 from app.skills.find_contradictions import check_and_save_contradictions
 from app.storage.sql_db import save_entities
 
@@ -147,23 +147,11 @@ def _format_candidates_block(cands: dict[str, list[str]]) -> str:
 # ── JSON парсинг и chunking ────────────────────────────────────────────────
 
 def _parse_json_array(raw: str, source_label: str) -> list[dict]:
-    try:
-        data = json.loads(raw)
-        if isinstance(data, list):
-            return data
-        logger.warning("entities/%s: expected JSON array, got %s", source_label, type(data).__name__)
-        return []
-    except json.JSONDecodeError:
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError as e:
-                logger.warning("entities/%s: regex-fallback failed: %s | head=%r",
-                               source_label, e, raw[:200])
-                return []
-        logger.warning("entities/%s: invalid JSON | head=%r", source_label, raw[:200])
-        return []
+    result = parse_json_array(raw)
+    if not result:
+        logger.warning("entities/%s: ни одного объекта не распарсилось | head=%r",
+                        source_label, raw[:200])
+    return result
 
 
 def _chunk_text(text: str) -> list[str]:
@@ -252,7 +240,7 @@ async def extract_entities_from_text(text: str) -> list[dict]:
             raw = await call_llm(
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_content}],
-                max_tokens=2500,
+                max_tokens=4096,
             )
         except Exception as e:
             logger.error("entities chunk %d/%d failed: %s", i + 1, len(chunks), e)
