@@ -546,7 +546,7 @@ async def run(
 
     # Document-level контекст для full mode имеет 3 стратегии в зависимости
     # от размера корпуса:
-    #   1) корпус влезает целиком (≤120K chars) → ПОЛНЫЕ ТЕКСТЫ
+    #   1) корпус влезает целиком (≤200K chars ≈ 50K токенов) → ПОЛНЫЕ ТЕКСТЫ
     #   2) средний (≤30 доков, не помещается) → ОБЗОРЫ (briefs)
     #   3) большой (>30 доков или брифов > 100K chars) → deep_research:
     #      router выбирает топ-N, потом iterative refinement по их полным
@@ -555,7 +555,9 @@ async def run(
     doc_briefs_block = ""
     full_texts_block = ""
     if mode in _FULL_CONTEXT_MODES and db is not None:
-        FULL_TEXTS_BUDGET = 120_000
+        # 200K символов ≈ 50K токенов — с запасом влезает в 200K-контекст
+        # Claude вместе с system-промптом, чанками и entity-memory.
+        FULL_TEXTS_BUDGET = 200_000
 
         from app.storage.sql_db import (
             get_all_document_briefs,
