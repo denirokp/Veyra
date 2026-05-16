@@ -185,19 +185,23 @@ async def _dispatch_tool(
     tool_input: dict,
     registry: list[RetrievedChunk],
 ) -> str:
-    """Исполняет вызов инструмента. registry мутируется — новые чанки из
-    search_corpus дописываются в конец со сквозной нумерацией."""
+    """Исполняет вызов инструмента. registry мутируется — новые (не дублирующие)
+    чанки из search_corpus дописываются в конец со сквозной нумерацией."""
     if name == "search_corpus":
         query = str(tool_input.get("query", "")).strip()
         if not query:
             return "Пустой запрос — нечего искать."
         include_archive = bool(tool_input.get("include_archive", False))
-        new_chunks = await retrieve(query, top_k=10, include_archive=include_archive)
-        if not new_chunks:
+        found = await retrieve(query, top_k=10, include_archive=include_archive)
+        if not found:
             return f"По запросу «{query}» в корпусе ничего не найдено."
+        known_ids = {c.id for c in registry}
+        fresh = [c for c in found if c.id not in known_ids]
+        if not fresh:
+            return f"По запросу «{query}» новых фрагментов нет — всё уже в контексте выше."
         offset = len(registry)
-        registry.extend(new_chunks)
-        return _build_context(new_chunks, offset=offset)
+        registry.extend(fresh)
+        return _build_context(fresh, offset=offset)
 
     if name == "market_context":
         topic = str(tool_input.get("topic", "")).strip()
@@ -211,14 +215,14 @@ async def _run_agent_loop(
     system: str,
     first_user_message: str,
     registry: list[RetrievedChunk],
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], set[str]]:
     """Tool-use loop. Модель вызывает инструменты, пока не сформирует финальный
-    ответ либо пока не исчерпан лимит итераций. Возвращает (raw_text, warnings).
-    registry мутируется внутри _dispatch_tool."""
+    ответ либо пока не исчерпан лимит итераций. Возвращает
+    (raw_text, warnings, tools_used). registry мутируется внутри _dispatch_tool."""
     llm = get_llm()
     messages: list[dict] = [{"role": "user", "content": first_user_message}]
-    warnings: list[str] = []
     tools_used: set[str] = set()
+    final_text = ""
 
     for _ in range(_MAX_TOOL_ITERATIONS):
         response = await llm.messages.create(
@@ -230,8 +234,10 @@ async def _run_agent_loop(
         )
 
         if response.stop_reason != "tool_use":
-            text = "\n".join(b.text for b in response.content if b.type == "text").strip()
-            return text, warnings
+            final_text = "\n".join(
+                b.text for b in response.content if b.type == "text"
+            ).strip()
+            break
 
         messages.append({"role": "assistant", "content": response.content})
         tool_results = []
@@ -246,18 +252,27 @@ async def _run_agent_loop(
                 "content": result_text,
             })
         messages.append({"role": "user", "content": tool_results})
+    else:
+        # Лимит итераций исчерпан — tool_choice=none форсирует текстовый ответ.
+        # tools оставляем: история содержит tool_use-блоки и требует их объявления.
+        response = await llm.messages.create(
+            model=settings.LLM_MODEL,
+            max_tokens=4096,
+            system=system,
+            tools=_TOOLS,
+            tool_choice={"type": "none"},
+            messages=messages,
+        )
+        final_text = "\n".join(
+            b.text for b in response.content if b.type == "text"
+        ).strip()
 
-    # Лимит итераций исчерпан — финальный вызов без инструментов вынуждает ответ.
+    warnings: list[str] = []
     if "market_context" in tools_used:
-        warnings.append("⚠️ Использован рыночный контекст — гипотеза модели, требует проверки")
-    response = await llm.messages.create(
-        model=settings.LLM_MODEL,
-        max_tokens=4096,
-        system=system,
-        messages=messages,
-    )
-    text = "\n".join(b.text for b in response.content if b.type == "text").strip()
-    return text, warnings
+        warnings.append(
+            "⚠️ Использован рыночный контекст — гипотеза модели, требует проверки"
+        )
+    return final_text, warnings, tools_used
 
 
 async def _parse_llm_response(
@@ -386,7 +401,9 @@ async def run(
         "ответь строго в формате JSON."
     )
 
-    raw, tool_warnings = await _run_agent_loop(SYSTEM_PROMPT, first_user_message, registry)
+    raw, tool_warnings, tools_used = await _run_agent_loop(
+        SYSTEM_PROMPT, first_user_message, registry
+    )
 
     answer, facts, hypotheses, warnings, requires = await _parse_llm_response(
         raw, registry, db
@@ -408,6 +425,10 @@ async def run(
     if mode != ChatMode.gaps:
         requires = []
 
+    agents_used = ["corpus"]
+    if "market_context" in tools_used:
+        agents_used.append("market_agent")
+
     return {
         "answer": answer,
         "facts": facts,
@@ -415,5 +436,5 @@ async def run(
         "warnings": warnings,
         "requires_verification": requires,
         "chunks_used": len(registry),
-        "agents_used": ["corpus"],
+        "agents_used": agents_used,
     }
