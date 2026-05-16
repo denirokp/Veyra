@@ -14,7 +14,13 @@ _client: chromadb.ClientAPI | None = None
 def get_client() -> chromadb.ClientAPI:
     global _client
     if _client is None:
-        _client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
+        # anonymized_telemetry=False гасит шумные "Failed to send telemetry
+        # event" — баг несовместимости Chroma с версией posthog, к работе
+        # хранилища отношения не имеет.
+        _client = chromadb.PersistentClient(
+            path=settings.CHROMA_PERSIST_DIR,
+            settings=chromadb.Settings(anonymized_telemetry=False),
+        )
     return _client
 
 
