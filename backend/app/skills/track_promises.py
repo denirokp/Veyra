@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.clients import call_llm, parse_json_array
+from app.clients import call_llm, fast_model, parse_json_array
 from app.storage.sql_db import save_promises
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,7 @@ async def extract_promises_from_text(
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_content}],
                 max_tokens=4096,
+                model=fast_model(),
             )
         except Exception as e:
             logger.error("promises chunk %d/%d failed: %s", i + 1, len(chunks), e)

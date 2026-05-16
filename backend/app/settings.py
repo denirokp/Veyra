@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://api.moonshot.ai/v1"
     LLM_MODEL: str = "moonshot-v1-128k"
+    # Модель для механических skills (извлечение сущностей и обещаний при
+    # индексации). Извлечение не требует глубокого рассуждения — сюда можно
+    # поставить дешёвую/быструю модель. Пусто → используется LLM_MODEL.
+    LLM_MODEL_FAST: str = ""
 
     # Embeddings — локальная sentence-transformers модель (без интернета).
     # Первый запуск скачивает ~500МБ в ~/.cache/huggingface.

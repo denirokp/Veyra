@@ -105,19 +105,25 @@ async def embed_one(text: str) -> list[float]:
     return results[0]
 
 
+def fast_model() -> str:
+    """Модель для механических skills. LLM_MODEL_FAST если задан, иначе LLM_MODEL."""
+    return settings.LLM_MODEL_FAST or settings.LLM_MODEL
+
+
 async def call_llm(
     *,
     system: str,
     messages: list[dict],
     max_tokens: int,
+    model: str | None = None,
 ) -> str:
     """LLM-вызов через OpenAI-совместимый API. С ретраями и rate-limit.
-    Возвращает текст ответа."""
+    model=None → settings.LLM_MODEL. Возвращает текст ответа."""
     async def _call() -> str:
         async with _LLM_SEMAPHORE:
             client = get_llm_client()
             response = await client.chat.completions.create(
-                model=settings.LLM_MODEL,
+                model=model or settings.LLM_MODEL,
                 max_tokens=max_tokens,
                 messages=[{"role": "system", "content": system}, *messages],
             )
