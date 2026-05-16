@@ -69,10 +69,19 @@ def main() -> int:
     if not _check_server():
         return 1
 
-    OUT_DIR.mkdir(exist_ok=True)
-    print(f"Сервер жив. Прогоняю {len(QUESTIONS)} вопросов → {OUT_DIR}\n")
+    # Опционально — подмножество вопросов по ключам:
+    #   python scripts/run_gate.py q5_L02
+    selected = set(sys.argv[1:])
+    questions = [q for q in QUESTIONS if not selected or q[0] in selected]
+    if selected and not questions:
+        valid = ", ".join(q[0] for q in QUESTIONS)
+        print(f"Неизвестные ключи {sorted(selected)}. Доступны: {valid}")
+        return 1
 
-    for key, mode, message in QUESTIONS:
+    OUT_DIR.mkdir(exist_ok=True)
+    print(f"Сервер жив. Прогоняю {len(questions)} вопрос(ов) → {OUT_DIR}\n")
+
+    for key, mode, message in questions:
         print("=" * 72)
         print(f"{key}  [режим: {mode}]")
         print(f"Вопрос: {message}")
