@@ -1,4 +1,9 @@
-"""Corpus Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой."""
+"""Corpus Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой.
+
+Оркестрация — tool-use loop: модель сама решает, нужен ли дополнительный
+поиск по корпусу (search_corpus) или рыночный контекст (market_context),
+вместо жёсткого single-shot RAG.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -10,9 +15,10 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients import get_llm
-from app.models.schemas import ChatMode, ChatResponse, FactItem, SourceRef
+from app.models.schemas import ChatMode, FactItem, SourceRef
 from app.rag.retriever import RetrievedChunk, fuse_results, retrieve
 from app.settings import settings
+from app.skills.market_agent import get_market_context
 from app.storage.sql_db import (
     get_document,
     get_open_contradictions_for_docs,
@@ -22,6 +28,8 @@ from app.storage.sql_db import (
 
 _PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 SYSTEM_PROMPT = (_PROMPTS_DIR / "corpus_system.txt").read_text(encoding="utf-8").strip()
+
+_MAX_TOOL_ITERATIONS = 5
 
 _INJECTION_PATTERNS = re.compile(
     r"ignore\s+(?:previous|all)\s+instructions?"
@@ -74,8 +82,52 @@ MODE_INSTRUCTIONS: dict[ChatMode, str] = {
     ),
 }
 
+# Инструменты, доступные агенту в tool-use loop.
+_TOOLS = [
+    {
+        "name": "search_corpus",
+        "description": (
+            "Поиск по корпусу внутренних документов команды (гибридный retrieval: "
+            "vector + BM25 + RRF). Используй, когда предоставленных источников "
+            "недостаточно: нужно уточнить тему, проверить смежный вопрос или найти "
+            "конкретную метрику. Возвращает пронумерованные источники — ссылайся на "
+            "их номера в поле source_id финального ответа."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Поисковый запрос"},
+                "include_archive": {
+                    "type": "boolean",
+                    "description": "Включать архивные документы (по умолчанию false)",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "market_context",
+        "description": (
+            "Рыночный контекст по теме на основе общих знаний модели — это НЕ "
+            "данные компании. Результат всегда гипотеза, требующая верификации. "
+            "Используй, только если вопрос явно требует внешнего/рыночного взгляда."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "Тема для рыночного контекста"},
+            },
+            "required": ["topic"],
+        },
+    },
+]
 
-def _build_context(chunks: list[RetrievedChunk]) -> str:
+
+def _build_context(chunks: list[RetrievedChunk], offset: int = 0) -> str:
+    """Рендерит чанки как пронумерованные источники.
+
+    offset — глобальный сдвиг нумерации (источники, добавленные через
+    search_corpus, продолжают сквозную нумерацию реестра)."""
     parts = []
     for i, c in enumerate(chunks):
         status_label = c.status.upper()
@@ -83,7 +135,7 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
         title = c.title or c.document_id[:8]
         section = f" / {c.section}" if c.section else ""
         parts.append(
-            f"[Источник {i+1} | {title}{section} | {status_label} | {level_label}]\n"
+            f"[Источник {offset + i + 1} | {title}{section} | {status_label} | {level_label}]\n"
             f"{c.content}"
         )
     return "\n\n---\n\n".join(parts)
@@ -128,30 +180,84 @@ def _build_entity_memory_block(entities: list, contradictions: list) -> str:
     return "\n".join(lines)
 
 
-async def _call_corpus_llm(system: str, user_message: str, max_retries: int = 2) -> str:
-    """LLM-вызов с повторной попыткой при невалидном JSON (до max_retries раз)."""
+async def _dispatch_tool(
+    name: str,
+    tool_input: dict,
+    registry: list[RetrievedChunk],
+) -> str:
+    """Исполняет вызов инструмента. registry мутируется — новые чанки из
+    search_corpus дописываются в конец со сквозной нумерацией."""
+    if name == "search_corpus":
+        query = str(tool_input.get("query", "")).strip()
+        if not query:
+            return "Пустой запрос — нечего искать."
+        include_archive = bool(tool_input.get("include_archive", False))
+        new_chunks = await retrieve(query, top_k=10, include_archive=include_archive)
+        if not new_chunks:
+            return f"По запросу «{query}» в корпусе ничего не найдено."
+        offset = len(registry)
+        registry.extend(new_chunks)
+        return _build_context(new_chunks, offset=offset)
+
+    if name == "market_context":
+        topic = str(tool_input.get("topic", "")).strip()
+        ctx = await get_market_context(topic)
+        return json.dumps(ctx, ensure_ascii=False)
+
+    return f"Неизвестный инструмент: {name}"
+
+
+async def _run_agent_loop(
+    system: str,
+    first_user_message: str,
+    registry: list[RetrievedChunk],
+) -> tuple[str, list[str]]:
+    """Tool-use loop. Модель вызывает инструменты, пока не сформирует финальный
+    ответ либо пока не исчерпан лимит итераций. Возвращает (raw_text, warnings).
+    registry мутируется внутри _dispatch_tool."""
     llm = get_llm()
-    messages: list[dict] = [{"role": "user", "content": user_message}]
-    for attempt in range(max_retries + 1):
+    messages: list[dict] = [{"role": "user", "content": first_user_message}]
+    warnings: list[str] = []
+    tools_used: set[str] = set()
+
+    for _ in range(_MAX_TOOL_ITERATIONS):
         response = await llm.messages.create(
             model=settings.LLM_MODEL,
             max_tokens=4096,
             system=system,
+            tools=_TOOLS,
             messages=messages,
         )
-        raw = response.content[0].text.strip()
-        try:
-            json.loads(raw)
-            return raw
-        except json.JSONDecodeError:
-            if attempt == max_retries:
-                return raw
-            messages = [
-                {"role": "user", "content": user_message},
-                {"role": "assistant", "content": raw},
-                {"role": "user", "content": "Твой ответ не является валидным JSON. Верни ТОЛЬКО валидный JSON без markdown-обёртки."},
-            ]
-    return ""
+
+        if response.stop_reason != "tool_use":
+            text = "\n".join(b.text for b in response.content if b.type == "text").strip()
+            return text, warnings
+
+        messages.append({"role": "assistant", "content": response.content})
+        tool_results = []
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+            tools_used.add(block.name)
+            result_text = await _dispatch_tool(block.name, block.input, registry)
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": result_text,
+            })
+        messages.append({"role": "user", "content": tool_results})
+
+    # Лимит итераций исчерпан — финальный вызов без инструментов вынуждает ответ.
+    if "market_context" in tools_used:
+        warnings.append("⚠️ Использован рыночный контекст — гипотеза модели, требует проверки")
+    response = await llm.messages.create(
+        model=settings.LLM_MODEL,
+        max_tokens=4096,
+        system=system,
+        messages=messages,
+    )
+    text = "\n".join(b.text for b in response.content if b.type == "text").strip()
+    return text, warnings
 
 
 async def _parse_llm_response(
@@ -219,28 +325,31 @@ async def run(
     file_content: str | None = None,
     db: AsyncSession | None = None,
 ) -> dict:
-    # Параллельный retrieval по подзапросам → RRF fusion
+    # Первичный retrieval по подзапросам → RRF fusion. Реестр источников
+    # дальше пополняется агентом через инструмент search_corpus.
     include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
     queries = subqueries or [message]
     if len(queries) == 1:
-        chunks = await retrieve(queries[0], top_k=15, include_archive=include_archive)
+        initial = await retrieve(queries[0], top_k=15, include_archive=include_archive)
     else:
         results = await asyncio.gather(*[
             retrieve(q, top_k=10, include_archive=include_archive)
             for q in queries
         ])
-        chunks = fuse_results(*results, top_k=15)
+        initial = fuse_results(*results, top_k=15)
+
+    registry: list[RetrievedChunk] = list(initial)
 
     # Entity memory — обогащаем контекст релевантными сущностями
     entity_block = ""
     if db is not None:
         keywords = [w for w in message.split() if len(w) > 3]
         entities = await search_entities_by_query(db, keywords, limit=20)
-        doc_ids = list({c.document_id for c in chunks})
+        doc_ids = list({c.document_id for c in registry})
         contradictions_in_scope = await get_open_contradictions_for_docs(db, doc_ids)
         entity_block = _build_entity_memory_block(entities, contradictions_in_scope)
 
-    # Task 3.5: для contradictions режима — дополняем все открытые расхождения из БД
+    # Для contradictions режима — дополняем все открытые расхождения из БД
     stored_contradictions_block = ""
     if mode == ChatMode.contradictions and db is not None:
         all_open = await list_contradictions(db, status="open")
@@ -261,32 +370,36 @@ async def run(
         if inj_warning:
             extra_warnings.append(inj_warning)
 
-    context = _build_context(chunks)
+    context = _build_context(registry)
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
 
-    user_message = (
+    first_user_message = (
         f"Режим: {mode.value}\n"
         f"Инструкция: {mode_instruction}\n\n"
         f"КОРПУС ДОКУМЕНТОВ:\n{context}"
         + (f"\n\n{entity_block}" if entity_block else "")
         + (f"\n\n{stored_contradictions_block}" if stored_contradictions_block else "")
         + extra_context
-        + f"\n\nВОПРОС: {message}"
+        + f"\n\nВОПРОС: {message}\n\n"
+        "Если предоставленных источников недостаточно для точного ответа — "
+        "вызови инструмент search_corpus. Когда контекста достаточно — "
+        "ответь строго в формате JSON."
     )
 
-    raw = await _call_corpus_llm(SYSTEM_PROMPT, user_message)
+    raw, tool_warnings = await _run_agent_loop(SYSTEM_PROMPT, first_user_message, registry)
 
     answer, facts, hypotheses, warnings, requires = await _parse_llm_response(
-        raw, chunks, db
+        raw, registry, db
     )
 
     warnings.extend(extra_warnings)
+    warnings.extend(tool_warnings)
 
-    if not chunks:
+    if not registry:
         warnings.append("⚠️ В корпусе не найдено релевантных документов по данному запросу")
 
     # Предупреждение об archived чанках
-    archive_chunks = {c.document_id: c for c in chunks if c.status == "archived"}
+    archive_chunks = {c.document_id: c for c in registry if c.status == "archived"}
     for doc_id, c in archive_chunks.items():
         label = c.title or doc_id[:8]
         warnings.append(f"⚠️ Использованы данные из архивного документа «{label}»")
@@ -301,6 +414,6 @@ async def run(
         "hypotheses": hypotheses,
         "warnings": warnings,
         "requires_verification": requires,
-        "chunks_used": len(chunks),
+        "chunks_used": len(registry),
         "agents_used": ["corpus"],
     }
