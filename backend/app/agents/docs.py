@@ -13,6 +13,8 @@ from app.rag.retriever import RetrievedChunk, retrieve
 from app.storage.sql_db import (
     get_document,
     get_open_contradictions_for_docs,
+    get_open_logic_signals_for_docs,
+    get_open_promises_for_docs,
     search_entities_by_query,
 )
 
@@ -282,9 +284,21 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
     return "\n\n---\n\n".join(parts), grouped
 
 
-def _build_entity_memory_block(entities: list, contradictions: list) -> str:
-    """Формирует блок entity memory для добавления в промпт."""
-    if not entities and not contradictions:
+def _build_entity_memory_block(
+    entities: list,
+    contradictions: list,
+    logic_signals: list | None = None,
+    promises: list | None = None,
+) -> str:
+    """Формирует блок entity memory для добавления в промпт.
+
+    Помимо метрик и числовых расхождений сюда подмешиваются логические
+    сигналы (смысловые противоречия между документами) и незакрытые
+    обещания — чтобы система проактивно показывала их в ответе, а не
+    держала молча в БД до отдельного запроса на эндпоинт."""
+    logic_signals = logic_signals or []
+    promises = promises or []
+    if not entities and not contradictions and not logic_signals and not promises:
         return ""
 
     lines = ["[ENTITY MEMORY — известные факты из документов]"]
@@ -298,12 +312,33 @@ def _build_entity_memory_block(entities: list, contradictions: list) -> str:
             lines.append(f"  • {e.name}{val}{unit}{date} [doc:{e.document_id[:8]}...]")
 
     if contradictions:
-        lines.append("Известные расхождения по этим документам:")
+        lines.append("Известные числовые расхождения по этим документам:")
         for c in contradictions[:5]:
             lines.append(
                 f"  ⚠ {c.metric}: {c.value_a} vs {c.value_b} "
                 f"[doc:{c.document_id_a[:8]} vs doc:{c.document_id_b[:8]}]"
             )
+
+    if logic_signals:
+        lines.append("Известные логические расхождения (смысловые) по этим документам:")
+        for s in logic_signals[:5]:
+            kind = f"{s.signal_type} · " if s.signal_type else ""
+            lines.append(
+                f"  ⚠ {kind}«{s.statement_a}» ↔ «{s.statement_b}» "
+                f"[doc:{s.document_id_a[:8]} vs doc:{s.document_id_b[:8]}]"
+            )
+
+    if promises:
+        lines.append("Незакрытые обещания по этим документам:")
+        for p in promises[:7]:
+            deadline = f", срок {p.deadline}" if p.deadline else ", без срока"
+            overdue = " [ПРОСРОЧЕНО]" if p.status == "overdue" else ""
+            lines.append(f"  • «{p.text}»{deadline}{overdue} [doc:{p.document_id[:8]}...]")
+
+    lines.append(
+        "Если что-то из этих расхождений/обещаний относится к вопросу — "
+        "обязательно отрази в warnings отдельной строкой."
+    )
 
     return "\n".join(lines)
 
@@ -599,14 +634,22 @@ async def run(
                 logger.info("full-mode: corpus too big (%d full chars), using %d briefs (%d chars)",
                             total, len(briefs), briefs_total)
 
-    # Entity memory — обогащаем контекст релевантными сущностями
+    # Entity memory — обогащаем контекст релевантными сущностями, числовыми
+    # расхождениями, логическими сигналами и незакрытыми обещаниями.
     entity_block = ""
     if db is not None:
         keywords = [w for w in message.split() if len(w) > 3]
         entities = await search_entities_by_query(db, keywords, limit=20)
         doc_ids = list({c.document_id for c in chunks})
         contradictions_in_scope = await get_open_contradictions_for_docs(db, doc_ids)
-        entity_block = _build_entity_memory_block(entities, contradictions_in_scope)
+        logic_signals_in_scope = await get_open_logic_signals_for_docs(db, doc_ids)
+        promises_in_scope = await get_open_promises_for_docs(db, doc_ids)
+        entity_block = _build_entity_memory_block(
+            entities,
+            contradictions_in_scope,
+            logic_signals_in_scope,
+            promises_in_scope,
+        )
 
     # Если загружен файл — добавляем его текст к запросу
     extra_context = ""

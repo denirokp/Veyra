@@ -631,3 +631,23 @@ async def list_promises(
     q = q.order_by(Promise.deadline.asc().nullslast())
     result = await session.execute(q)
     return list(result.scalars().all())
+
+
+async def get_open_promises_for_docs(
+    session: AsyncSession,
+    document_ids: list[str],
+) -> list[Promise]:
+    """Незакрытые обещания (open/overdue) для набора документов."""
+    from sqlalchemy import select
+    if not document_ids:
+        return []
+    q = (
+        select(Promise)
+        .where(
+            Promise.document_id.in_(document_ids),
+            Promise.status.in_(("open", "overdue")),
+        )
+        .order_by(Promise.deadline.asc().nullslast())
+    )
+    result = await session.execute(q)
+    return list(result.scalars().all())
