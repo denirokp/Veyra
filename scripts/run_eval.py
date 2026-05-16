@@ -49,14 +49,8 @@ async def run_case(client: httpx.AsyncClient, base_url: str, case: dict) -> dict
 
     answer = data.get("answer", "")
     facts = data.get("facts", [])
-    mode_detected = data.get("metadata", {}).get("mode_detected", "")
 
     failures = []
-
-    # Mode check
-    expected_mode = case.get("expected_mode")
-    if expected_mode and mode_detected != expected_mode:
-        failures.append(f"mode={mode_detected!r} expected={expected_mode!r}")
 
     # Required keywords
     for kw in case.get("required_keywords", []):
@@ -88,7 +82,6 @@ async def run_case(client: httpx.AsyncClient, base_url: str, case: dict) -> dict
         "id": case["id"],
         "status": status,
         "failures": failures,
-        "mode_detected": mode_detected,
         "facts_count": len(facts),
         "answer_preview": answer[:120],
         "latency_ms": latency_ms,

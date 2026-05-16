@@ -1,0 +1,113 @@
+# Eval set — кросс-документная детекция (исполняемая версия docs/eval-seed.md)
+#
+# Девять находок из ручного анализа трёх реальных документов, оформленные
+# как прогоняемые кейсы. Запуск:
+#   python scripts/run_eval.py --yaml tests/eval_set_contradictions.yaml
+#
+# ПРЕДУСЛОВИЕ: в корпус загружены три документа —
+#   D1  P&S Progress review 2025 & Action Plan 2026 (24.10.2025)
+#   D2  Pro sellers' education strategy (27.03.2025)
+#   D3  B2C Journey — Deep Dive (April 2026)
+# Без них кейсы не имеют смысла.
+#
+# ОГРАНИЧЕНИЕ ХАРНЕССА: проверка по ключевым словам. Числовые находки
+# (N-01, N-02) проверяются автоматически по числам-якорям. Логические
+# находки автоматический харнесс достоверно не ловит — для них смотри
+# answer_preview в JSON-отчёте и сверяй с полем notes вручную.
+# Полное описание каждой находки — docs/eval-seed.md.
+
+cases:
+
+  - id: contra_L01
+    query: "По итогам 2025 года база PRO-продавцов растёт или сокращается?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 1
+    require_sources: true
+    notes: >
+      L-01. D1 рапортует достижение целей P&S и рост; D3 — спад базы
+      271k→255k с Q3'25. Ответ должен отразить спад, а не только рост.
+      Сверить answer_preview вручную.
+
+  - id: contra_N01
+    query: "Какой среднемесячный отток PRO-продавцов в 2025 году?"
+    required_keywords: ["19", "23"]
+    forbidden_keywords: []
+    min_facts: 0
+    require_sources: false
+    notes: >
+      N-01. Внутри D3 расхождение: exec summary −19k/мес, Appendix 2
+      traction model −23k/мес. Хороший ответ называет обе цифры.
+
+  - id: contra_N02
+    query: "Какой churn rate заложен в финансовую модель B2C Journey?"
+    required_keywords: ["5,54"]
+    forbidden_keywords: []
+    min_facts: 0
+    require_sources: false
+    notes: >
+      N-02. Traction-модель D3 использует 5,54%, а нарратив FAQ-1
+      говорит про 7%. Ответ должен сослаться на 5,54% и в идеале
+      отметить расхождение с 7%.
+
+  - id: contra_N03
+    query: "Какой ожидаемый доход от направления обучения продавцов?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 1
+    require_sources: true
+    notes: >
+      N-03. D2: +72 млн руб за 2 года. D3: SX & Education +1 141 млн
+      руб к 2030. Разные горизонты — но ~16x повод свести. Ручная сверка.
+
+  - id: contra_L02
+    query: "Avito уже является платформой №1 для старта бизнеса онлайн?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 1
+    require_sources: true
+    notes: >
+      L-02. D2 транслирует позиционирование как факт; D3 — как цель
+      на 2028 и приводит CES 39 против 77 у конкурентов. Ответ не
+      должен утверждать «№1» как достигнутый факт. Ручная сверка.
+
+  - id: contra_L03
+    query: "Как команда оценивает CPT-тариф — это драйвер роста или проблема?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 1
+    require_sources: true
+    notes: >
+      L-03. D1 масштабирует CPT как левередж продаж; D3 называет
+      текущий подход к CPT механикой оттока. Ручная сверка.
+
+  - id: contra_P01
+    query: "Запущена ли в 2025 обучающая платформа для продавцов (Business School)?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 1
+    require_sources: true
+    notes: >
+      P-01. D2 (март'25) обещал перезапуск Business School в 2025
+      с выделенным бюджетом; D3 (апр'26) — «No educational platform».
+      Ответ должен отметить невыполненное обещание. Ручная сверка.
+
+  - id: contra_G01
+    query: "Есть ли выделенная команда и ресурсы на образовательное направление?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 1
+    require_sources: true
+    notes: >
+      G-01. D2 запросил центр экспертизы + 2 FTE; D3 год спустя —
+      «no dedicated resources». Поток без ресурсов год. Ручная сверка.
+
+  - id: contra_G02
+    query: "Отмечался ли в плане P&S за октябрь 2025 риск оттока PRO-продавцов?"
+    required_keywords: []
+    forbidden_keywords: []
+    min_facts: 0
+    require_sources: false
+    notes: >
+      G-02. D1 (24.10.2025) написан с позиции достижения целей и не
+      отметил отток, который D3 датирует серединой 2025. Ручная сверка.
