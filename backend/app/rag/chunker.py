@@ -5,7 +5,6 @@ import re
 from dataclasses import dataclass
 
 CHUNK_TARGET_TOKENS = 500
-CHUNK_OVERLAP_TOKENS = 50
 
 
 @dataclass
@@ -50,6 +49,49 @@ def split_by_headers(text: str) -> list[tuple[str, str, str]]:
     return [(h1, h2, body) for h1, h2, body in sections if body]
 
 
+def _split_long_section(body: str, step_chars: int) -> list[str]:
+    """Разбивает длинный раздел построчно. Если граница части попадает внутрь
+    Markdown-таблицы — переносит строку-заголовок и разделитель таблицы в
+    новую часть, иначе строки данных теряют имена колонок."""
+    lines = body.splitlines()
+    pieces: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    table_header: list[str] = []
+
+    for i, line in enumerate(lines):
+        is_header = (
+            line.startswith("|")
+            and i + 1 < len(lines)
+            and lines[i + 1].lstrip().startswith("| ---")
+        )
+        if is_header:
+            table_header = [line, lines[i + 1]]
+        elif line.strip() and not line.startswith("|"):
+            table_header = []
+
+        if buf and buf_len + len(line) > step_chars:
+            pieces.append("\n".join(buf).strip())
+            buf, buf_len = [], 0
+            starts_table_body = (
+                table_header
+                and line.startswith("|")
+                and line not in table_header
+                and not line.lstrip().startswith("| ---")
+            )
+            if starts_table_body:
+                buf.extend(table_header)
+                buf_len += sum(len(x) + 1 for x in table_header)
+
+        buf.append(line)
+        buf_len += len(line) + 1
+
+    if buf:
+        pieces.append("\n".join(buf).strip())
+
+    return [p for p in pieces if p]
+
+
 def chunk_document(text: str, document_metadata: dict) -> list[Chunk]:
     sections = split_by_headers(text)
     chunks: list[Chunk] = []
@@ -67,13 +109,7 @@ def chunk_document(text: str, document_metadata: dict) -> list[Chunk]:
             ))
             idx += 1
         else:
-            # Разбиваем длинный раздел на части с overlap
-            words = body.split()
-            step = CHUNK_TARGET_TOKENS * 4  # символов
-            overlap = CHUNK_OVERLAP_TOKENS * 4
-            start = 0
-            while start < len(body):
-                piece = body[start: start + step]
+            for piece in _split_long_section(body, CHUNK_TARGET_TOKENS * 4):
                 chunks.append(Chunk(
                     content=piece,
                     section=h1,
@@ -83,6 +119,5 @@ def chunk_document(text: str, document_metadata: dict) -> list[Chunk]:
                     metadata={**document_metadata, "section": h1, "subsection": h2},
                 ))
                 idx += 1
-                start += step - overlap
 
     return chunks

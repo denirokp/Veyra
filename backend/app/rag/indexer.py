@@ -18,10 +18,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html"}
 def parse_text(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
-        import pdfplumber
-        with pdfplumber.open(file_path) as pdf:
-            pages = [p.extract_text() or "" for p in pdf.pages]
-        return "\n\n".join(pages)
+        return _parse_pdf(file_path)
     if suffix == ".docx":
         return _parse_docx(file_path)
     if suffix in (".md", ".txt", ".html"):
@@ -29,22 +26,47 @@ def parse_text(file_path: Path) -> str:
     raise ValueError(f"Unsupported format: {suffix}")
 
 
-def _render_docx_table(table) -> str:
-    """Рендерит таблицу построчно в Markdown: каждая строка таблицы — одна
+def _render_table_rows(rows: list[list]) -> str:
+    """Рендерит строки таблицы построчно в Markdown: каждая строка — одна
     строка текста, ячейки разделены `|`. Сохраняет привязку значений к
     строке-метрике, которая теряется при плоском обходе."""
-    rows: list[str] = []
-    for row in table.rows:
-        cells = [" ".join(cell.text.split()) for cell in row.cells]
+    norm: list[str] = []
+    for row in rows:
+        cells = [" ".join(str(cell or "").split()) for cell in row]
         if not any(cells):
             continue
-        rows.append("| " + " | ".join(cells) + " |")
-    if not rows:
+        norm.append("| " + " | ".join(cells) + " |")
+    if not norm:
         return ""
-    if len(rows) > 1:
-        n_cols = rows[0].count("|") - 1
-        rows.insert(1, "| " + " | ".join(["---"] * n_cols) + " |")
-    return "\n".join(rows)
+    if len(norm) > 1:
+        n_cols = norm[0].count("|") - 1
+        norm.insert(1, "| " + " | ".join(["---"] * n_cols) + " |")
+    return "\n".join(norm)
+
+
+def _render_docx_table(table) -> str:
+    return _render_table_rows([[cell.text for cell in row.cells] for row in table.rows])
+
+
+def _parse_pdf(file_path: Path) -> str:
+    """Парсинг .pdf. extract_text() даёт нарратив (текст таблиц в нём
+    схлопнут построчно), дополнительно извлекаем таблицы структурно через
+    extract_tables() и рендерим в Markdown. Возможно частичное дублирование
+    табличного текста — приемлемо ради сохранения «метрика → значение».
+    NB: не проверено на реальном .pdf — нужна валидация на проде."""
+    import pdfplumber
+
+    blocks: list[str] = []
+    with pdfplumber.open(file_path) as pdf:
+        for page in pdf.pages:
+            text = (page.extract_text() or "").strip()
+            if text:
+                blocks.append(text)
+            for table in page.extract_tables():
+                rendered = _render_table_rows(table)
+                if rendered:
+                    blocks.append(rendered)
+    return "\n\n".join(blocks)
 
 
 def _parse_docx(file_path: Path) -> str:
