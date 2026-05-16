@@ -1,20 +1,28 @@
-"""Первичная индексация всех документов в data/docs."""
+"""Первичная индексация всех документов в backend/data/docs.
+
+Скрипт переходит в каталог backend/ перед работой, чтобы все относительные
+пути (БД, Chroma, docs) резолвились так же, как при запуске сервера из
+backend/ — иначе индексация писала бы в другую базу, чем читает API."""
 import asyncio
+import os
 import sys
 import uuid
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
+BACKEND_DIR = Path(__file__).parent.parent / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
+os.chdir(BACKEND_DIR)
 
-from app.rag.indexer import index_document
+from app.rag.indexer import SUPPORTED_EXTENSIONS as SUPPORTED, index_document
+from app.settings import settings
 from app.storage.sql_db import AsyncSession, create_document, engine, init_db
 
-DOCS_DIR = Path("data/docs")
-SUPPORTED = {".pdf", ".docx", ".md", ".txt"}
+DOCS_DIR = Path(settings.DOCS_DIR)
 
 
 async def main():
     await init_db()
+    print(f"Каталог документов: {DOCS_DIR.resolve()}")
     files = [f for f in DOCS_DIR.rglob("*") if f.suffix.lower() in SUPPORTED]
     print(f"Найдено {len(files)} документов")
 
