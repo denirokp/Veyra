@@ -11,6 +11,7 @@ from app.clients import call_llm
 from app.models.schemas import ChatMode, ChatResponse, FactItem, SourceRef
 from app.rag.retriever import RetrievedChunk, retrieve
 from app.storage.sql_db import (
+    count_documents,
     get_document,
     get_open_contradictions_for_docs,
     get_open_logic_signals_for_docs,
@@ -366,10 +367,10 @@ async def _parse_llm_response(
                 data = json.loads(match.group())
             except json.JSONDecodeError as e:
                 logger.warning("docs_agent: regex-fallback не распарсился: %s | head=%r", e, raw[:200])
-                return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
+                return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], [], 0
         else:
             logger.warning("docs_agent: невалидный JSON | head=%r", raw[:200])
-            return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], []
+            return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], [], 0
 
     # Пост-фильтр: вычищаем артефакты типа [Источник 5] / (Source 7) / [doc:abc]
     # которые LLM иногда вставляет в free-text вопреки правилам в system prompt.
@@ -484,7 +485,7 @@ async def _parse_llm_response(
             f"не подтверждены содержимым источников (защита от галлюцинаций)",
         )
 
-    return answer, facts, hypotheses, warnings, requires
+    return answer, facts, hypotheses, warnings, requires, unsupported_count
 
 
 async def run(
@@ -639,6 +640,14 @@ async def run(
                     "warnings": deep_result.get("warnings", []) or [],
                     "requires_verification": deep_result.get("requires_verification", []) or [],
                     "agents_used": ["docs", "deep_research"],
+                    "chunks_used": len(chunks),
+                    "coverage": {
+                        "context_mode": "deep_research",
+                        "documents_in_context": len(briefs),
+                        "chunks_retrieved": len(chunks),
+                    },
+                    "facts_dropped": 0,
+                    "facts_kept": len(facts),
                 }
 
             # Стратегия 2: брифы влезают, тексты — нет
@@ -674,18 +683,25 @@ async def run(
     context, chunks = _build_context(chunks)
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
 
+    # Режим контекста — для метрики охвата ответа (ТЗ v1.4 §13.4).
     if full_texts_block:
         knowledge_section = (
             "\n\nПОЛНЫЕ ТЕКСТЫ ДОКУМЕНТОВ (анализируй ВСЁ что есть, не упускай детали):\n"
             + full_texts_block + "\n"
         )
+        context_mode = "full_texts"
+        docs_in_context = full_texts_block.count("=== ПОЛНЫЙ ТЕКСТ")
     elif doc_briefs_block:
         knowledge_section = (
             "\n\nОБЗОРЫ ВСЕХ ДОКУМЕНТОВ В БАЗЕ (для общей картины каждого дока):\n"
             + doc_briefs_block + "\n"
         )
+        context_mode = "briefs"
+        docs_in_context = doc_briefs_block.count("=== ОБЗОР ДОКУМЕНТА")
     else:
         knowledge_section = ""
+        context_mode = "retrieval"
+        docs_in_context = len({c.document_id for c in chunks})
 
     # Web search — для full mode если запрос требует «внешнего опыта» И
     # Web search — для full / research режимов когда запрос требует
@@ -790,7 +806,7 @@ async def run(
             "agents_used": ["docs"],
         }
 
-    answer, facts, hypotheses, warnings, requires = await _parse_llm_response(
+    answer, facts, hypotheses, warnings, requires, dropped = await _parse_llm_response(
         raw, chunks, db
     )
 
@@ -862,7 +878,7 @@ async def run(
                     messages=[{"role": "user", "content": user_message + feedback}],
                     max_tokens=max_tokens,
                 )
-                ans2, facts2, hyp2, warn2, req2 = await _parse_llm_response(raw2, chunks, db)
+                ans2, facts2, hyp2, warn2, req2, drop2 = await _parse_llm_response(raw2, chunks, db)
                 # Принимаем регенерацию только если она НЕ ухудшила атрибуцию.
                 # Часто регенерация ломает source_id mapping (LLM забывает что
                 # это число) — все факты валятся в nil UUID. Откат.
@@ -870,6 +886,7 @@ async def run(
                 valid_after = _valid_facts_count(facts2)
                 if ans2 and valid_after >= max(1, valid_before - 1):
                     answer, facts, hypotheses, warnings, requires = ans2, facts2, hyp2, warn2, req2
+                    dropped = drop2
                     agents.append("self_check")
                     logger.info("self_check: accepted (valid sources %d → %d)",
                                 valid_before, valid_after)
@@ -893,6 +910,23 @@ async def run(
         label = c.title or doc_id[:8]
         warnings.append(f"⚠️ Использованы данные из архивного документа «{label}»")
 
+    # Охват проверки (ТЗ v1.4 §13.4) — ответ не выдаётся без указания, сколько
+    # документов реально просмотрено. В retrieval-режиме это явно в warnings,
+    # чтобы «расхождений нет» не означало «посмотрел 5% корпуса».
+    documents_total = await count_documents(db) if db is not None else 0
+    coverage = {
+        "context_mode": context_mode,
+        "documents_total": documents_total,
+        "documents_in_context": docs_in_context,
+        "chunks_retrieved": len(chunks),
+    }
+    if context_mode == "retrieval":
+        warnings.append(
+            f"⚠️ Охват: просмотрено {docs_in_context} документов из "
+            f"{documents_total} через retrieval ({len(chunks)} фрагментов) — "
+            f"возможны находки за пределами выборки"
+        )
+
     return {
         "answer": answer,
         "facts": facts,
@@ -901,4 +935,7 @@ async def run(
         "requires_verification": requires,
         "chunks_used": len(chunks),
         "agents_used": agents,
+        "coverage": coverage,
+        "facts_dropped": dropped,
+        "facts_kept": len(facts),
     }

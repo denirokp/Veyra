@@ -281,6 +281,9 @@ async def run(request: ChatRequest, db: AsyncSession) -> ChatResponse:
             "agents_used": result.get("agents_used", ["docs"]),
             "latency_ms": latency_ms,
             "chunks_retrieved": result.get("chunks_used", 0),
+            "coverage": result.get("coverage", {}),
+            "facts_dropped": result.get("facts_dropped", 0),
+            "facts_kept": result.get("facts_kept", 0),
         },
     )
 

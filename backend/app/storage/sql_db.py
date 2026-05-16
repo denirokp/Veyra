@@ -484,6 +484,15 @@ async def search_entities_by_query(
     return list(result.scalars().all())
 
 
+async def count_documents(session: AsyncSession, status: str = "actual") -> int:
+    """Число документов заданного статуса — для метрики охвата ответа."""
+    from sqlalchemy import func, select
+    result = await session.execute(
+        select(func.count()).select_from(Document).where(Document.status == status)
+    )
+    return int(result.scalar() or 0)
+
+
 async def get_open_contradictions_for_docs(
     session: AsyncSession,
     document_ids: list[str],
