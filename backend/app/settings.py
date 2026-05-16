@@ -38,10 +38,13 @@ class Settings(BaseSettings):
     # (logic signals — pairwise сравнение пар документов).
     DISABLE_LOGIC_SIGNALS: bool = False
 
-    # При индексации запускать дорогие background-skills (extract_entities,
-    # track_promises, find_logic_signals) и генерацию document brief.
-    # По умолчанию выключено — для быстрой bulk-индексации и gate-прогонов.
-    ENABLE_BACKGROUND_SIGNALS: bool = False
+    # При индексации запускать background-skills (extract_entities →
+    # числовые расхождения, track_promises, find_logic_signals) и генерацию
+    # document brief. Это и есть "бульон" — без них система работает как
+    # обычный RAG-поиск без проактивных находок. Включено по умолчанию;
+    # выключать имеет смысл только при bulk-индексации огромных корпусов
+    # (ENABLE_BACKGROUND_SIGNALS=0), чтобы не тратить ~6 LLM-вызовов на документ.
+    ENABLE_BACKGROUND_SIGNALS: bool = True
 
     # Опциональная авторизация по статичному bearer-токену. Если задан —
     # все API endpoints кроме /health требуют заголовок
