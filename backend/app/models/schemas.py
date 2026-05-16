@@ -24,16 +24,6 @@ class DocumentStatus(str, Enum):
     unknown = "unknown"
 
 
-class ChatMode(str, Enum):
-    search = "search"
-    contradictions = "contradictions"
-    promises = "promises"
-    gaps = "gaps"
-    write = "write"
-    validate = "validate"
-    research = "research"
-
-
 class PromiseStatus(str, Enum):
     open = "open"
     fulfilled = "fulfilled"
@@ -51,7 +41,6 @@ class ContradictionStatus(str, Enum):
 
 class ChatRequest(BaseModel):
     message: str
-    mode: Optional[ChatMode] = None
     file: Optional[str] = None  # base64
     session_id: Optional[UUID] = None
 

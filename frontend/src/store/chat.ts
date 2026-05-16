@@ -2,18 +2,16 @@ import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 import { sendChat, uploadDocument, reviewInitiativeQuick } from '../api/client'
 import { queryClient } from '../queryClient'
-import type { Message, ChatMode, ChatResponse, Document, QuickReviewResult } from '../types'
+import type { Message, ChatResponse, Document, QuickReviewResult } from '../types'
 
 interface ChatState {
   messages: Message[]
   loading: boolean
   uploading: boolean
-  mode: ChatMode | null
   sessionId: string
   inputPrefill: string
   send: (text: string, file?: File) => Promise<void>
   uploadFile: (file: File) => Promise<void>
-  setMode: (mode: ChatMode | null) => void
   setPrefill: (text: string) => void
   clear: () => void
 }
@@ -40,11 +38,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
   loading: false,
   uploading: false,
-  mode: null,
   sessionId: uuidv4(),
   inputPrefill: '',
 
-  setMode: (mode) => set({ mode }),
   setPrefill: (text) => set({ inputPrefill: text }),
   clear: () => set({ messages: [] }),
 
@@ -61,7 +57,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const fileB64 = file ? await fileToBase64(file) : undefined
       const response: ChatResponse = await sendChat({
         message: text,
-        mode: get().mode,
         file: fileB64,
         session_id: get().sessionId,
       })

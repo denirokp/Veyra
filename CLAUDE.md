@@ -15,9 +15,9 @@
 - **Слой A — корпусный движок.** Ingestion → чанкинг → эмбеддинги →
   Chroma + гибридный retrieval + БД находок. Кастомный оправданно,
   масштабируется на 200+ доков. Это ров.
-- **Слой B — оркестрация.** Сейчас: `route_request()` → enum-режим →
-  single-shot RAG. Цель рефактора — tool-use loop (скиллы как tools).
-  Это table stakes.
+- **Слой B — оркестрация.** Tool-use loop: corpus-агент с инструментами
+  (`search_corpus`, `market_context`). Единый разговорный режим, без
+  enum-режимов. Это table stakes.
 
 Не смешивать. Усилие — в слой A и качество находок.
 
@@ -29,8 +29,8 @@ backend/app/
   settings.py          конфиг из .env
   clients.py           LLM-клиент (Claude через Avito AI proxy)
   agents/
-    orchestrator.py    route_request() + run() — роутинг запроса
-    corpus.py          RAG + LLM-генерация, FACT/HYPOTHESIS JSON
+    orchestrator.py    приём запроса → делегирование corpus-агенту
+    corpus.py          RAG + tool-use loop, FACT/HYPOTHESIS JSON
   rag/
     indexer.py         парсинг (pdf/docx/md/txt/html) + индексация
     chunker.py         токен-aware чанкинг
@@ -96,6 +96,5 @@ cd frontend && npm install && npm run dev
 ## Известные расхождения
 
 - `docs/TZ.md` упоминается в README, но отсутствует в репозитории.
-- Чат-оркестратор — single-shot, не agentic loop (цель рефактора).
-- При извлечении из .docx таблицы схлопываются — нужна table-aware
-  разметка для корректной привязки «метрика → значение».
+- Существующий корпус нужно переиндексировать после фикса table-aware
+  парсинга .docx — старые документы проиндексированы без таблиц.

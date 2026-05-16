@@ -1,12 +1,12 @@
 """Corpus Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой.
 
-Оркестрация — tool-use loop: модель сама решает, нужен ли дополнительный
-поиск по корпусу (search_corpus) или рыночный контекст (market_context),
-вместо жёсткого single-shot RAG.
+Единый разговорный режим: модель сама решает через tool-use loop, нужен ли
+дополнительный поиск по корпусу (search_corpus) или рыночный контекст
+(market_context), и какой акцент уместен для запроса — отдельных enum-режимов
+больше нет.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 from pathlib import Path
@@ -15,14 +15,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients import get_llm
-from app.models.schemas import ChatMode, FactItem, SourceRef
-from app.rag.retriever import RetrievedChunk, fuse_results, retrieve
+from app.models.schemas import FactItem, SourceRef
+from app.rag.retriever import RetrievedChunk, retrieve
 from app.settings import settings
 from app.skills.market_agent import get_market_context
 from app.storage.sql_db import (
     get_document,
     get_open_contradictions_for_docs,
-    list_contradictions,
     search_entities_by_query,
 )
 
@@ -45,42 +44,6 @@ _INJECTION_PATTERNS = re.compile(
     r"|<\s*/?system\s*>",
     re.IGNORECASE,
 )
-
-MODE_INSTRUCTIONS: dict[ChatMode, str] = {
-    ChatMode.search: (
-        "Найди и синтезируй всё что знает корпус по заданной теме. "
-        "Если видишь документы которые противоречат друг другу — отметь в warnings. "
-        "requires_verification оставь пустым массивом."
-    ),
-    ChatMode.contradictions: (
-        "Найди числовые расхождения по теме. "
-        "В facts укажи разные цифры из разных документов. "
-        "В warnings — явно отметь каждое расхождение."
-    ),
-    ChatMode.promises: (
-        "Найди все обещания и планы по теме. "
-        "Для каждого: точная цитата, документ, срок если есть. "
-        "В warnings — отметь просроченные или без дедлайна."
-    ),
-    ChatMode.gaps: (
-        "Найди темы которые обсуждались в корпусе но не вошли в текущую стратегию. "
-        "Ранжируй по недавности и количеству упоминаний."
-    ),
-    ChatMode.write: (
-        "Ты помогаешь написать документ. "
-        "Собери все релевантные факты из корпуса для использования в тексте."
-    ),
-    ChatMode.validate: (
-        "Оцени инициативу на основе корпуса. "
-        "Укажи: что уже изучали, что противоречит, что поддерживает. "
-        "В requires_verification — конкретные вопросы которые нужно проверить перед запуском."
-    ),
-    ChatMode.research: (
-        "Собери всё что корпус знает по теме включая архивные документы. "
-        "Ищи паттерны, тренды, повторяющиеся проблемы. "
-        "В hypotheses — что можно предположить исходя из найденного."
-    ),
-}
 
 # Инструменты, доступные агенту в tool-use loop.
 _TOOLS = [
@@ -302,7 +265,7 @@ async def _parse_llm_response(
         if not isinstance(f, dict) or not f.get("statement"):
             continue
 
-        # source_id теперь целое число — номер источника
+        # source_id — целое число, номер источника
         try:
             source_num = int(f.get("source_id", 0))
         except (TypeError, ValueError):
@@ -335,24 +298,12 @@ async def _parse_llm_response(
 
 async def run(
     message: str,
-    mode: ChatMode,
-    subqueries: list[str] | None = None,
     file_content: str | None = None,
     db: AsyncSession | None = None,
 ) -> dict:
-    # Первичный retrieval по подзапросам → RRF fusion. Реестр источников
-    # дальше пополняется агентом через инструмент search_corpus.
-    include_archive = mode in (ChatMode.search, ChatMode.gaps, ChatMode.contradictions)
-    queries = subqueries or [message]
-    if len(queries) == 1:
-        initial = await retrieve(queries[0], top_k=15, include_archive=include_archive)
-    else:
-        results = await asyncio.gather(*[
-            retrieve(q, top_k=10, include_archive=include_archive)
-            for q in queries
-        ])
-        initial = fuse_results(*results, top_k=15)
-
+    # Первичный retrieval; реестр источников дальше пополняется агентом через
+    # инструмент search_corpus (включая архив по необходимости).
+    initial = await retrieve(message, top_k=15, include_archive=False)
     registry: list[RetrievedChunk] = list(initial)
 
     # Entity memory — обогащаем контекст релевантными сущностями
@@ -364,19 +315,6 @@ async def run(
         contradictions_in_scope = await get_open_contradictions_for_docs(db, doc_ids)
         entity_block = _build_entity_memory_block(entities, contradictions_in_scope)
 
-    # Для contradictions режима — дополняем все открытые расхождения из БД
-    stored_contradictions_block = ""
-    if mode == ChatMode.contradictions and db is not None:
-        all_open = await list_contradictions(db, status="open")
-        if all_open:
-            lines = ["[ЗАФИКСИРОВАННЫЕ ЧИСЛОВЫЕ РАСХОЖДЕНИЯ ИЗ ПАМЯТИ СИСТЕМЫ]"]
-            for c in all_open[:10]:
-                lines.append(
-                    f"  • {c.metric}: {c.value_a} vs {c.value_b}"
-                    + (f" (период: {c.period})" if c.period else "")
-                )
-            stored_contradictions_block = "\n".join(lines)
-
     extra_context = ""
     extra_warnings: list[str] = []
     if file_content:
@@ -386,18 +324,15 @@ async def run(
             extra_warnings.append(inj_warning)
 
     context = _build_context(registry)
-    mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS[ChatMode.search])
 
     first_user_message = (
-        f"Режим: {mode.value}\n"
-        f"Инструкция: {mode_instruction}\n\n"
         f"КОРПУС ДОКУМЕНТОВ:\n{context}"
         + (f"\n\n{entity_block}" if entity_block else "")
-        + (f"\n\n{stored_contradictions_block}" if stored_contradictions_block else "")
         + extra_context
         + f"\n\nВОПРОС: {message}\n\n"
         "Если предоставленных источников недостаточно для точного ответа — "
-        "вызови инструмент search_corpus. Когда контекста достаточно — "
+        "вызови инструмент search_corpus (include_archive=true — если нужны "
+        "архивные/исторические документы). Когда контекста достаточно — "
         "ответь строго в формате JSON."
     )
 
@@ -420,10 +355,6 @@ async def run(
     for doc_id, c in archive_chunks.items():
         label = c.title or doc_id[:8]
         warnings.append(f"⚠️ Использованы данные из архивного документа «{label}»")
-
-    # requires_verification показываем только в gaps-режиме
-    if mode != ChatMode.gaps:
-        requires = []
 
     agents_used = ["corpus"]
     if "market_context" in tools_used:

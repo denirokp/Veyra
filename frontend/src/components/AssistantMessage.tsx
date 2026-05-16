@@ -211,8 +211,6 @@ export function AssistantMessage({ content, response }: Props) {
           <button type="button" className="hover:text-slate-900 ring-focus rounded transition-colors duration-120">
             Уточнить
           </button>
-          <span className="text-slate-300">·</span>
-          <span className="text-slate-400 tabular-nums">{metadata.mode_detected}</span>
         </div>
         <div className="inline-flex items-center gap-1 text-slate-400">
           <span className="mr-1">Полезно?</span>

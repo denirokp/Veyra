@@ -1,5 +1,4 @@
 export type DocumentStatus = 'actual' | 'draft' | 'archived' | 'superseded' | 'unknown'
-export type ChatMode = 'search' | 'contradictions' | 'promises' | 'gaps' | 'write' | 'validate' | 'research'
 
 export interface SourceRef {
   document_id: string
@@ -23,7 +22,6 @@ export interface ChatResponse {
   warnings: string[]
   requires_verification: string[]
   metadata: {
-    mode_detected: string
     agents_used: string[]
     latency_ms: number
     chunks_retrieved: number
@@ -32,7 +30,6 @@ export interface ChatResponse {
 
 export interface ChatRequest {
   message: string
-  mode?: ChatMode | null
   file?: string | null
   session_id?: string
 }
