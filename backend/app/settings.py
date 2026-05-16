@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     # (logic signals — pairwise сравнение пар документов).
     DISABLE_LOGIC_SIGNALS: bool = False
 
+    # При индексации запускать дорогие background-skills (extract_entities,
+    # track_promises, find_logic_signals) и генерацию document brief.
+    # По умолчанию выключено — для быстрой bulk-индексации и gate-прогонов.
+    ENABLE_BACKGROUND_SIGNALS: bool = False
+
     # Опциональная авторизация по статичному bearer-токену. Если задан —
     # все API endpoints кроме /health требуют заголовок
     #   Authorization: Bearer <API_AUTH_TOKEN>
