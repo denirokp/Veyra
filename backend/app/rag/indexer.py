@@ -23,20 +23,63 @@ def parse_text(file_path: Path) -> str:
             pages = [p.extract_text() or "" for p in pdf.pages]
         return "\n\n".join(pages)
     if suffix == ".docx":
-        import docx as python_docx
-        doc = python_docx.Document(file_path)
-        paragraphs = []
-        for para in doc.paragraphs:
-            if para.text.strip():
-                if para.style.name.startswith("Heading"):
-                    level = para.style.name.split()[-1]
-                    paragraphs.append(f"{'#' * int(level)} {para.text}")
-                else:
-                    paragraphs.append(para.text)
-        return "\n\n".join(paragraphs)
+        return _parse_docx(file_path)
     if suffix in (".md", ".txt", ".html"):
         return file_path.read_text(encoding="utf-8")
     raise ValueError(f"Unsupported format: {suffix}")
+
+
+def _render_docx_table(table) -> str:
+    """Рендерит таблицу построчно в Markdown: каждая строка таблицы — одна
+    строка текста, ячейки разделены `|`. Сохраняет привязку значений к
+    строке-метрике, которая теряется при плоском обходе."""
+    rows: list[str] = []
+    for row in table.rows:
+        cells = [" ".join(cell.text.split()) for cell in row.cells]
+        if not any(cells):
+            continue
+        rows.append("| " + " | ".join(cells) + " |")
+    if not rows:
+        return ""
+    if len(rows) > 1:
+        n_cols = rows[0].count("|") - 1
+        rows.insert(1, "| " + " | ".join(["---"] * n_cols) + " |")
+    return "\n".join(rows)
+
+
+def _parse_docx(file_path: Path) -> str:
+    """Парсинг .docx с сохранением таблиц.
+
+    `docx.Document.paragraphs` не включает текст внутри таблиц — при наивном
+    обходе вся табличная часть (метрики, цифры) теряется. Обходим тело
+    документа в порядке следования, рендеря таблицы построчно."""
+    import docx as python_docx
+    from docx.oxml.table import CT_Tbl
+    from docx.oxml.text.paragraph import CT_P
+    from docx.table import Table as _DocxTable
+    from docx.text.paragraph import Paragraph as _DocxParagraph
+
+    doc = python_docx.Document(file_path)
+    blocks: list[str] = []
+
+    for child in doc.element.body.iterchildren():
+        if isinstance(child, CT_P):
+            para = _DocxParagraph(child, doc)
+            text = para.text.strip()
+            if not text:
+                continue
+            style = para.style.name if para.style else ""
+            tail = style.split()[-1] if style else ""
+            if style.startswith("Heading") and tail.isdigit():
+                blocks.append(f"{'#' * int(tail)} {text}")
+            else:
+                blocks.append(text)
+        elif isinstance(child, CT_Tbl):
+            rendered = _render_docx_table(_DocxTable(child, doc))
+            if rendered:
+                blocks.append(rendered)
+
+    return "\n\n".join(blocks)
 
 
 def _collection_for_status(status: str) -> str:
