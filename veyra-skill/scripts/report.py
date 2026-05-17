@@ -1,11 +1,15 @@
-"""Сборка Confluence-страницы по результату инструмента veyra
-(check_initiative / search_corpus).
+"""Сборка Confluence-страницы по результату разбора Veyra.
 
 Формат — заголовок + ответ + таблица расхождений + источники, по
 образцу скилла quality-metrics. Только stdlib.
 
-Вход (stdin): JSON-ответ инструмента veyra — структура движка:
+Скрипт ничего не вызывает и не рассуждает — он форматирует структуру
+разбора, которую собрал Claude (данные veyra-mcp + его рассуждение).
+
+Вход (stdin): JSON следующей структуры:
 {answer, facts[], warnings[], hypotheses[], requires_verification[], metadata}.
+metadata.coverage — охват проверки
+(documents_in_context / documents_total / context_mode).
 """
 from __future__ import annotations
 
