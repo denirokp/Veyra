@@ -101,7 +101,7 @@ Veyra/
 ├── frontend/               ── React/Vite UI (админ-панель) ──
 ├── veyra-mcp/              ── MCP-СЕРВЕР (Слой 2): 8 data-инструментов ──
 ├── veyra-skill/            ── НАВЫК для Avito skills-hub (Слой 3) ──
-├── scripts/                ── index_docs.py, run_gate.py, gate_ground_truth.json ──
+├── scripts/                ── index_docs.py, run_gate.py, eval_detectors.py, regression.py, hooks/ ──
 ├── data/                   # data/docs, data/chroma, khronika.db (gitignored)
 ├── docker-compose.yml
 └── docs/
@@ -109,6 +109,8 @@ Veyra/
     ├── SYSTEM.md           полное описание системы с нуля
     ├── ARCHITECTURE.md     архитектура: слои, модель данных, потоки
     ├── SCALE-PLAN.md       план загрузки корпуса 100→300
+    ├── CASES-PLAN.md       вывод бизнес-кейсов на целевой путь
+    ├── GAP-ANALYSIS-AVITO.md  сравнение с AI-экосистемой Avito
     ├── STATUS.md           снимок статуса сессии
     ├── gate_report.md      результаты гейта детекторов
     └── TZ-Veyra.md         техническое задание (v1.4)
@@ -169,6 +171,9 @@ LLM_MODEL=moonshot-v1-128k
 | Initiative review (RAG + contradictions + LLM synthesis) | ✅ |
 | Grounding фактов (regex/fuzzy match) — защита от галлюцинаций | ✅ |
 | veyra-mcp — 8 data-инструментов (alpha, не в production mcp-registry) | ✅ |
+| Изоляция серверного «мозга» — флаг `ENABLE_LEGACY_CHAT` | ✅ |
+| Eval-харнес precision детекторов (`scripts/eval_detectors.py`) | ✅ каркас, не прогнан |
+| Регрессионный харнес (`scripts/regression.py` + git-хук) | ✅ каркас, baseline не заведён |
 | Docker compose | ✅ |
 
 Границы проверки и открытые риски — в [`docs/gate_report.md`](docs/gate_report.md)

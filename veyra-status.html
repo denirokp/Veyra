@@ -205,6 +205,8 @@
           <li><b>veyra-skill / SKILL.md:</b> плейбук рассуждения Claude — цитаты, разметка ФАКТ/ГИПОТЕЗА, контракт охвата.</li>
           <li class="p"><b>Изоляция серверного «мозга»:</b> живой путь = Claude через MCP; legacy-путь выключается флагом.</li>
           <li class="p"><b>Gap-анализ</b> против AI-экосистемы Avito (MCP Hub, Skills Hub).</li>
+          <li class="p"><b>Eval-харнес детекторов (G1):</b> precision находок через LLM-judge.</li>
+          <li class="p"><b>Регрессионный харнес (G4):</b> baseline + git-хук на изменения скилла.</li>
         </ul>
       </div>
       <div>
@@ -282,7 +284,7 @@
         <ul class="clean">
           <li class="g"><b>Фаза 1</b> — полнотекстовый retrieval-гейт: <b>закрыта в объёме</b>, 4 / 5 кейсов (5-й — rate-limit, не провал логики).</li>
           <li class="a"><b>Фаза 1.5</b> — retrieval-гейт: <b>почти закрыта</b>.</li>
-          <li class="r"><b>Фаза 2</b> — валидация детекторов: <b>не начата</b>, precision находок не измерен.</li>
+          <li class="a"><b>Валидация детекторов (G1/G4)</b> — каркасы eval- и регрессионного харнеса <b>построены, но не прогнаны</b> (нужен корпус + LLM-доступ).</li>
           <li class="p"><b>Архитектура</b> согласована с паттерном Avito; veyra-skill уже в формате Skills Hub.</li>
         </ul>
       </div>
@@ -329,8 +331,8 @@
       <div class="card coral">
         <div class="lbl" style="font-size:18px">Фаза 2 — Валидация детекторов</div>
         <div class="desc" style="font-size:15px;margin-top:12px">
-          • eval-харнес + независимый ground truth, замер precision (21 / 19 / 215).<br><br>
-          • регрессионный харнес на изменения SKILL.md.
+          • каркасы eval- и регрессионного харнеса построены;<br><br>
+          • прогнать на корпусе, замерить precision (21 / 19 / 215), разметка аналитиком.
         </div>
         <div class="desc" style="margin-top:14px;font-weight:800;color:var(--coral)">Ворота — приоритет №1</div>
       </div>

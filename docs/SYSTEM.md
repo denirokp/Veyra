@@ -3,7 +3,8 @@
 **Версия:** 1.0 · 17 мая 2026
 Самодостаточный документ: вся логика, структура, бизнес-смысл и границы.
 Связанные документы — `ARCHITECTURE.md` (глубже про слои), `SCALE-PLAN.md`
-(загрузка корпуса), `STATUS.md` (статус сессии), `README.md` (индекс набора).
+(загрузка корпуса), `CASES-PLAN.md` (вывод бизнес-кейсов), `GAP-ANALYSIS-AVITO.md`
+(сравнение с экосистемой Avito), `STATUS.md` (статус сессии), `README.md` (индекс).
 
 > **Имена.** Внешнее имя продукта — **Veyra**. «Хроника» — внутренний
 > кодовик; отсюда имена в коде: `khronika.db`, коллекции ChromaDB
@@ -142,7 +143,7 @@ Veyra/
 │       ├── clients.py      LLM-клиент, эмбеддинги, parse_json_array
 │       │
 │       ├── api/            ── HTTP-эндпоинты («двери» движка) ──
-│       │   ├── chat.py            POST /chat (ответ), GET /retrieve (чистый поиск)
+│       │   ├── chat.py            POST /chat (LEGACY, флаг ENABLE_LEGACY_CHAT), GET /retrieve
 │       │   ├── documents.py       загрузка/список/текст/reindex/удаление документов
 │       │   ├── contradictions.py  GET числовых и логических расхождений
 │       │   ├── promises.py        GET обещаний
@@ -150,9 +151,9 @@ Veyra/
 │       │   ├── initiative.py      разбор инициативы
 │       │   └── metrics.py         метрики агентов
 │       │
-│       ├── agents/         ── оркестрация и синтез ответа ──
-│       │   ├── orchestrator.py    определяет режим/стиль запроса, роутит
-│       │   └── docs.py            docs_agent: RAG + сборка ответа с цитатами
+│       ├── agents/         ── LEGACY серверный «мозг» (только /api/chat) ──
+│       │   ├── orchestrator.py    LEGACY: режим/стиль запроса, роутинг
+│       │   └── docs.py            LEGACY: docs_agent — RAG + сборка ответа
 │       │
 │       ├── rag/            ── обработка документов и поиск ──
 │       │   ├── chunker.py         нарезка документа на куски (table-aware)
@@ -200,9 +201,12 @@ Veyra/
 │   ├── scripts/report.py   сборка Confluence-отчёта
 │   └── references/README.md инструкция пользователя
 │
-├── scripts/                ── эксплуатация ──
+├── scripts/                ── эксплуатация и валидация ──
 │   ├── index_docs.py       загрузка корпуса (первичная + --sync инкремент)
-│   ├── run_gate.py         гейт детекторов / монитор масштаба
+│   ├── run_gate.py         гейт recall / монитор масштаба (→ gate_summary.json)
+│   ├── eval_detectors.py   eval-харнес: precision детекторов (LLM-judge, G1)
+│   ├── regression.py       регрессия recall/precision против baseline (G4)
+│   ├── hooks/pre-push      git-хук: регрессия при правке поведенческих файлов
 │   └── gate_ground_truth.json  разметка для авто-подсчёта recall
 │
 └── docs/                   ── документация ──
@@ -210,6 +214,8 @@ Veyra/
     ├── SYSTEM.md           ← этот файл, полное описание
     ├── ARCHITECTURE.md     архитектура: слои, модель данных, потоки
     ├── SCALE-PLAN.md       план загрузки 100→300 документов
+    ├── CASES-PLAN.md       вывод бизнес-кейсов на целевой путь
+    ├── GAP-ANALYSIS-AVITO.md  сравнение с AI-экосистемой Avito
     ├── STATUS.md           снимок статуса сессии
     ├── gate_report.md      результаты гейта детекторов
     └── TZ-Veyra.md         техническое задание (актуальная версия — v1.4)
@@ -255,9 +261,13 @@ cd backend && uvicorn app.main:app        # :8000
 ### 6.4. Проверить детекторы / масштаб
 
 ```bash
-python3 scripts/run_gate.py --retrieval --runs 3
+python3 scripts/run_gate.py --retrieval --runs 3   # recall по трекам
+python3 scripts/eval_detectors.py                  # precision детекторов (LLM-judge)
+python3 scripts/regression.py                      # регрессия против baseline
 ```
-Прогоняет 5 размеченных вопросов, считает recall по трекам.
+`run_gate.py` считает recall, `eval_detectors.py` — precision находок
+детекторов, `regression.py` сравнивает обе метрики с зафиксированным
+baseline (см. также git-хук `scripts/hooks/pre-push`).
 
 ---
 
