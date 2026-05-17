@@ -16,6 +16,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 BASE = "http://localhost:8000"
@@ -203,14 +204,29 @@ def main() -> int:
 
     print("-" * 72)
     print("RECALL по трекам (доля попаданий, усреднённая по вопросам трека):")
+    recall_by_track: dict[str, float] = {}
     for track, rates in sorted(track_hits.items()):
         avg = sum(rates) / len(rates)
+        recall_by_track[track] = round(avg, 4)
         verdict = "PASS" if avg >= 0.8 else "НЕ ПРОЙДЕН"
         print(f"  {track:12} {avg*100:5.0f}%   {verdict}")
+
+    # Структурная сводка — для regression.py (сравнение с baseline, G4).
+    (OUT_DIR / "gate_summary.json").write_text(
+        json.dumps({
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "runs": runs,
+            "force_retrieval": force_retrieval,
+            "recall_by_track": recall_by_track,
+            "questions": sorted(results.keys()),
+        }, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     print("\nPrecision не автоматизируется — оцени вручную по WARNINGS и "
           "по meta «факты ✓/✗» (drop-rate) в детальном выводе прогона 1.")
     print(f"Сырые ответы: {OUT_DIR}/<key>.run<N>.json")
+    print(f"Сводка для регрессии: {OUT_DIR}/gate_summary.json")
     return 0
 
 
