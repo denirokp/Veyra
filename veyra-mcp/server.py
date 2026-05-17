@@ -88,14 +88,21 @@ async def check_initiative(text: str) -> dict:
 
 
 @mcp.tool()
-async def find_contradictions() -> dict:
-    """Известные числовые и логические расхождения в корпусе.
-
-    Предвычислены при индексации (числовые — одна метрика, разные
-    значения; логические — несовместимые утверждения). Используй для
-    «где у нас нестыковки в документах».
+async def find_numeric_contradictions() -> dict:
+    """Известные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с разными
+    значениями (между документами и внутри одного документа).
+    Предвычислены при индексации.
     """
-    return {"contradictions": await _get("/api/contradictions")}
+    return {"numeric_contradictions": await _get("/api/contradictions/numeric")}
+
+
+@mcp.tool()
+async def find_logic_contradictions() -> dict:
+    """Известные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
+    смыслу утверждения («здесь говорим одно, здесь другое»).
+    Предвычислены при индексации.
+    """
+    return {"logic_contradictions": await _get("/api/contradictions/logic")}
 
 
 @mcp.tool()
@@ -114,6 +121,26 @@ async def find_gaps() -> dict:
     или выпавшие между приоритетами. Используй для «что мы упустили».
     """
     return {"gaps": await _get("/api/docs/gaps")}
+
+
+@mcp.tool()
+async def write_draft(topic: str) -> dict:
+    """Помощь в написании документа/инициативы по теме: собирает
+    grounded-факты из корпуса и даёт черновик в стиле команды.
+    Финальный текст пишет человек — это заготовка с опорой на реальные
+    документы, а не готовый документ.
+    """
+    return await _post("/api/chat", {"message": topic, "mode": "write"})
+
+
+@mcp.tool()
+async def market_research(topic: str) -> dict:
+    """Рыночный контекст по теме — практики конкурентов, бенчмарки,
+    сопоставление с внешним рынком. Если у движка настроен веб-поиск
+    (Tavily/Brave) — тянет свежие данные из интернета; без ключа
+    отдаёт знания модели с явной пометкой.
+    """
+    return await _post("/api/chat", {"message": topic, "mode": "research"})
 
 
 @mcp.tool()
