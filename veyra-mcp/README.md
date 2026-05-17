@@ -1,63 +1,78 @@
 # veyra-mcp
 
-MCP-сервер Veyra — детекторы расхождений, противоречий и невыполненных
-обещаний в стратегических документах коммерческого блока Avito.
+MCP-сервер Veyra — корпоративная память коммерческого блока Avito как
+набор инструментов для Claude / Avito AI.
 
-## Статус: Фаза 1, Трек B — skeleton
+## Архитектура
 
-Все инструменты возвращают заглушки (`{"status": "not_implemented", "stub": true}`).
-Реальная логика (retrieval + детекторы) заливается в Фазе 2, Трек E —
-**только после прохождения гейта детекторов** (Принцип 1 ТЗ v1.3).
+`veyra-mcp` — **тонкий MCP-фасад**. Он не содержит логики: каждый
+инструмент проксирует запрос в HTTP-API движка (`backend/`). Движок
+остаётся «толстым» сервисом — индекс корпуса, детекторы, память.
+veyra-mcp отдаёт его наружу по протоколу MCP.
 
-`/health` — единственный неглушёный эндпоинт.
+```
+Claude / Avito AI ──MCP (streamable-http)──> veyra-mcp ──HTTP──> backend (движок)
+```
 
-## Запуск локально
+## Статус: alpha
+
+Реальная логика движка уже подключена (проксирование), но сервис
+**не регистрируется в production mcp-registry** до полного прохождения
+retrieval-гейта (ТЗ Принцип 1). Инструменты `find_contradictions` /
+`find_gaps` / `find_open_promises` / `corpus_stats` / `get_document`
+читают предвычисленные данные и безопасны; `search_corpus` и
+`check_initiative` запускают LLM-логику движка.
+
+## Запуск
 
 ```bash
 cd veyra-mcp
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+
+# движок (backend) должен быть поднят отдельно — по умолчанию :8000
+VEYRA_BACKEND_URL=http://localhost:8000 python server.py
 ```
 
-Проверка:
+Переменные окружения:
 
-```bash
-curl -s localhost:8000/health
-curl -s -X POST localhost:8000/tools/check_initiative \
-  -H 'Content-Type: application/json' -d '{"text":"пример инициативы"}'
-```
-
-Тесты: `pytest tests/ -q`
-
-## Эндпоинты (контракт зафиксирован, тела — заглушки)
-
-| Эндпоинт | Вход | Назначение (Трек E) |
+| Переменная | Назначение | По умолчанию |
 |---|---|---|
-| `GET /health` | — | health-check (реальный) |
-| `POST /tools/check_initiative` | `{text}` | сверка инициативы с корпусом → расхождения |
-| `POST /tools/find_contradictions` | `{doc_id}` | расхождения для документа из корпуса |
-| `POST /tools/search_corpus` | `{query, top_k}` | retrieval по корпусу |
-| `POST /tools/get_document` | `{doc_id}` | полный текст документа для цитат |
+| `VEYRA_BACKEND_URL` | адрес движка Veyra | `http://localhost:8000` |
+| `VEYRA_BACKEND_TOKEN` | bearer-токен бэкенда (если включён `API_AUTH_TOKEN`) | пусто |
+| `VEYRA_MCP_HOST` / `VEYRA_MCP_PORT` | адрес самого MCP-сервера | `0.0.0.0` / `8765` |
+| `VEYRA_HTTP_TIMEOUT` | таймаут запроса к бэкенду, сек | `240` |
 
-## Авторизация
+## Инструменты
 
-`app/auth.py` — пока заглушка. Dev-режим: если задан `VEYRA_MCP_DEV_TOKEN`,
-требуется заголовок `Authorization: Bearer <token>`; иначе сервис открыт
-(локальная разработка). Реальный Keycloak Avito подключается при выходе
-на PaaS — меняется только тело `require_auth`.
+| Инструмент | Что делает | Бэкенд |
+|---|---|---|
+| `search_corpus` | поиск по памяти — «что мы знаем про X» | `POST /api/chat` (search) |
+| `check_initiative` | сверка инициативы с корпусом | `POST /api/chat` (validate) |
+| `find_contradictions` | известные расхождения | `GET /api/contradictions` |
+| `find_open_promises` | незакрытые обещания | `GET /api/promises` |
+| `find_gaps` | серые зоны | `GET /api/docs/gaps` |
+| `get_document` | полный документ по id | `GET /api/documents/{id}` |
+| `corpus_stats` | сводка по корпусу | `GET /api/docs/stats` |
+| `health` | доступность движка | `GET /health` |
 
-## Открытый вопрос — транспорт MCP
+## Подключение из Claude
 
-Сейчас инструменты отдаются как обычные REST-эндпоинты — этого достаточно
-для smoke-теста инфраструктуры (PaaS, Keycloak, mcp-registry). Требует ли
-Avito MCP Hub именно MCP-протокол (streamable HTTP / JSON-RPC) для remote-
-серверов — **уточнить по `docs.k.avito.ru/mcp-hub`**. Логика инструментов
-вынесена в `app/tools.py` транспортно-независимо: при необходимости поверх
-неё добавляется MCP-протокольный слой без переписывания самих инструментов.
+Как remote-MCP (streamable-http). Пример клиентской конфигурации:
 
-## Чего НЕ делать (Принцип 1 ТЗ)
+```json
+{
+  "mcpServers": {
+    "veyra": { "url": "http://<host>:8765/mcp" }
+  }
+}
+```
 
-- Не заливать реальную логику детекторов до прохождения гейта.
-- Не вызывать LLM и не подключать индекс корпуса из эндпоинтов на Фазе 1.
-- Не мерджить в production mcp-registry — только draft PR с пометкой `[ALPHA]`.
+## Открытые вопросы (перед production)
+
+- Точный формат регистрации remote-MCP в Avito mcp-hub — сверить по
+  `docs.k.avito.ru/mcp-hub` (путь mount, требования к health).
+- Авторизация самого veyra-mcp (кто может звать инструменты) — через
+  mcp-hub / Keycloak; на этапе alpha доступ только разработчикам.
+- Прогон против живого MCP-клиента — сервер написан, но end-to-end с
+  Claude ещё не проверялся.
