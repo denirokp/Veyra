@@ -1,4 +1,10 @@
-"""Docs Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой."""
+"""Docs Agent — RAG поиск + LLM генерация с ФАКТ/ГИПОТЕЗА структурой.
+
+LEGACY — серверный «мозг». Вызывается только через orchestrator из
+POST /api/chat (React-админ-панель). В целевой архитектуре это
+рассуждение делает Claude по плейбуку veyra-skill/SKILL.md, не сервер.
+Не развивать.
+"""
 from __future__ import annotations
 
 import json

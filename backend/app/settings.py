@@ -61,5 +61,13 @@ class Settings(BaseSettings):
     # случайного 50MB body, который положит LLM-контекст и/или память.
     MAX_REQUEST_BODY_MB: int = 5
 
+    # Серверный «мозг» POST /api/chat (orchestrator + docs-agent, LLM на
+    # живом пути) — LEGACY. Продуктовый живой путь — Claude через
+    # veyra-mcp; серверный /api/chat нужен только React-админ-панели.
+    # В production-деплое без панели можно выключить
+    # (ENABLE_LEGACY_CHAT=0) — останется чистый слой данных (/api/retrieve
+    # и data-эндпоинты), который и потребляет veyra-mcp.
+    ENABLE_LEGACY_CHAT: bool = True
+
 
 settings = Settings()
