@@ -321,12 +321,18 @@ def _build_entity_memory_block(
             date = f" ({e.date_context})" if e.date_context else ""
             lines.append(f"  • {e.name}{val}{unit}{date} [doc:{e.document_id[:8]}...]")
 
+    def _loc(id_a: str, id_b: str) -> str:
+        # document_id_a == document_id_b → находка внутри одного документа.
+        if id_a and id_a == id_b:
+            return f"внутри документа {id_a[:8]}"
+        return f"doc:{(id_a or '')[:8]} vs doc:{(id_b or '')[:8]}"
+
     if contradictions:
         lines.append("Известные числовые расхождения по этим документам:")
         for c in contradictions[:5]:
             lines.append(
                 f"  ⚠ {c.metric}: {c.value_a} vs {c.value_b} "
-                f"[doc:{c.document_id_a[:8]} vs doc:{c.document_id_b[:8]}]"
+                f"[{_loc(c.document_id_a, c.document_id_b)}]"
             )
 
     if logic_signals:
@@ -335,7 +341,7 @@ def _build_entity_memory_block(
             kind = f"{s.signal_type} · " if s.signal_type else ""
             lines.append(
                 f"  ⚠ {kind}«{s.statement_a}» ↔ «{s.statement_b}» "
-                f"[doc:{s.document_id_a[:8]} vs doc:{s.document_id_b[:8]}]"
+                f"[{_loc(s.document_id_a, s.document_id_b)}]"
             )
 
     if promises:

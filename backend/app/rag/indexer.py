@@ -197,6 +197,7 @@ async def index_document(
     from app.skills.extract_entities import extract_and_save
     from app.skills.track_promises import extract_and_save_promises
     from app.skills.find_logic_signals import find_logic_signals_for_document
+    from app.skills.find_intra_contradictions import find_intra_contradictions
     from app.skills.document_brief import generate_document_brief
     from app.storage.sql_db import update_document as _update_document
 
@@ -204,6 +205,7 @@ async def index_document(
         ("extract_entities", extract_and_save(text, document_id, document_metadata, db)),
         ("track_promises", extract_and_save_promises(text, document_id, document_metadata, db)),
         ("find_logic_signals", find_logic_signals_for_document(document_id, db)),
+        ("find_intra_contradictions", find_intra_contradictions(document_id, text, db)),
     ) or ()):
         try:
             _res = await coro
