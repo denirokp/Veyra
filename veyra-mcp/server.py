@@ -1,22 +1,21 @@
 """veyra-mcp — MCP-сервер Veyra.
 
-Тонкий MCP-фасад над движком Veyra. Инструменты проксируют запросы в
-HTTP-API бэкенда (backend/): сам backend остаётся «толстым» сервисом
-(retrieval + детекторы + память корпуса), а veyra-mcp отдаёт его наружу
-как набор MCP-инструментов — чтобы Claude / Avito AI могли дёргать
-корпоративную память Veyra из любого диалога.
+СЛОЙ ДАННЫХ. veyra-mcp не рассуждает и не вызывает LLM в живом пути —
+он только ПОДТЯГИВАЕТ материал из корпоративной памяти Veyra:
+фрагменты документов, предвычисленные расхождения/обещания, карточки
+документов. Рассуждение (синтез ответа, написание, веб-обогащение,
+анализ серых зон) делает Claude — veyra-mcp даёт ему сырьё.
 
-ЭТАП: alpha. Регистрировать в production mcp-registry — только после
-полного прохождения retrieval-гейта (ТЗ Принцип 1). Инструменты,
-читающие предвычисленные таблицы (find_contradictions / find_gaps /
-find_open_promises), безопасны; check_initiative и search_corpus
-запускают LLM-логику движка.
+Три слоя архитектуры:
+  1. Индексация (батч) — детекторы движка варят «бульон» в таблицы.
+  2. veyra-mcp (живой путь) — ЧИСТЫЕ данные, ноль LLM, ноль токенов.
+  3. Claude — берёт данные veyra-mcp и рассуждает поверх.
+
+ЭТАП: alpha — не в production mcp-registry до полного retrieval-гейта.
 
 Запуск:
     pip install -r requirements.txt
     VEYRA_BACKEND_URL=http://localhost:8000 python server.py
-
-Транспорт — streamable-http (для remote-MCP в Avito mcp-hub).
 """
 from __future__ import annotations
 
@@ -27,7 +26,7 @@ from mcp.server.fastmcp import FastMCP
 
 BACKEND_URL = os.getenv("VEYRA_BACKEND_URL", "http://localhost:8000").rstrip("/")
 BACKEND_TOKEN = os.getenv("VEYRA_BACKEND_TOKEN", "")
-HTTP_TIMEOUT = float(os.getenv("VEYRA_HTTP_TIMEOUT", "240"))
+HTTP_TIMEOUT = float(os.getenv("VEYRA_HTTP_TIMEOUT", "60"))
 
 mcp = FastMCP(
     "veyra",
@@ -44,7 +43,7 @@ def _headers() -> dict:
 
 
 async def _get(path: str, params: dict | None = None):
-    """GET к бэкенду. При недоступности возвращает {"error": ...}, не падает."""
+    """GET к движку. При недоступности возвращает {"error": ...}, не падает."""
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             r = await client.get(f"{BACKEND_URL}{path}", params=params, headers=_headers())
@@ -54,101 +53,53 @@ async def _get(path: str, params: dict | None = None):
         return {"error": f"backend GET {path} failed: {exc}"}
 
 
-async def _post(path: str, payload: dict):
-    """POST к бэкенду. При недоступности возвращает {"error": ...}, не падает."""
-    try:
-        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            r = await client.post(f"{BACKEND_URL}{path}", json=payload, headers=_headers())
-            r.raise_for_status()
-            return r.json()
-    except Exception as exc:  # noqa: BLE001
-        return {"error": f"backend POST {path} failed: {exc}"}
-
-
 @mcp.tool()
-async def search_corpus(query: str, top_k: int = 5) -> dict:
-    """Поиск по корпоративной памяти Veyra — «что мы уже знаем про X».
-
-    Возвращает синтезированный ответ с фактами и ссылками на
-    документы-источники. Используй, когда нужно понять, что компания
-    уже писала по теме, перед тем как писать новое.
+async def search_corpus(query: str, top_k: int = 10) -> dict:
+    """Поиск по корпоративной памяти — возвращает РЕЛЕВАНТНЫЕ ФРАГМЕНТЫ
+    документов (сырьё, не готовый ответ). Синтезируй ответ сам из этих
+    фрагментов и ссылайся на документы-источники. Используй, чтобы
+    собрать материал по теме перед разбором, написанием или сверкой.
     """
-    return await _post("/api/chat", {"message": query, "mode": "search"})
-
-
-@mcp.tool()
-async def check_initiative(text: str) -> dict:
-    """Сверка новой инициативы со стратегическим корпусом.
-
-    Находит расхождения, противоречия с прошлыми решениями и пробелы.
-    Используй при запросах «проверь инициативу», «согласуется ли это
-    со стратегией», «нет ли противоречий с тем, что мы уже решили».
-    """
-    return await _post("/api/chat", {"message": text, "mode": "validate"})
+    return {"passages": await _get("/api/retrieve", {"query": query, "top_k": top_k})}
 
 
 @mcp.tool()
 async def find_numeric_contradictions() -> dict:
-    """Известные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с разными
-    значениями (между документами и внутри одного документа).
-    Предвычислены при индексации.
+    """Предвычисленные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с
+    разными значениями (между документами и внутри документа).
+    Готовая таблица, без LLM-вызова.
     """
     return {"numeric_contradictions": await _get("/api/contradictions/numeric")}
 
 
 @mcp.tool()
 async def find_logic_contradictions() -> dict:
-    """Известные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
-    смыслу утверждения («здесь говорим одно, здесь другое»).
-    Предвычислены при индексации.
+    """Предвычисленные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
+    смыслу утверждения. Готовая таблица, без LLM-вызова.
     """
     return {"logic_contradictions": await _get("/api/contradictions/logic")}
 
 
 @mcp.tool()
 async def find_open_promises() -> dict:
-    """Незакрытые обещания корпуса (open / overdue).
-
-    Что было обещано в документах и не отмечено выполненным. Используй
-    для «что мы обещали и не сделали».
+    """Предвычисленные незакрытые обещания (open / overdue) — что
+    обещали в документах и не отметили выполненным. Готовая таблица.
     """
     return {"promises": await _get("/api/promises")}
 
 
 @mcp.tool()
-async def find_gaps() -> dict:
-    """Серые зоны корпуса — темы и инициативы без ресурсов, владельцев
-    или выпавшие между приоритетами. Используй для «что мы упустили».
+async def list_documents() -> dict:
+    """Список документов корпуса (id, название, статус, тип) — чтобы
+    понять, что вообще есть в памяти, и выбрать документ для разбора.
     """
-    return {"gaps": await _get("/api/docs/gaps")}
-
-
-@mcp.tool()
-async def write_draft(topic: str) -> dict:
-    """Помощь в написании документа/инициативы по теме: собирает
-    grounded-факты из корпуса и даёт черновик в стиле команды.
-    Финальный текст пишет человек — это заготовка с опорой на реальные
-    документы, а не готовый документ.
-    """
-    return await _post("/api/chat", {"message": topic, "mode": "write"})
-
-
-@mcp.tool()
-async def market_research(topic: str) -> dict:
-    """Рыночный контекст по теме — практики конкурентов, бенчмарки,
-    сопоставление с внешним рынком. Если у движка настроен веб-поиск
-    (Tavily/Brave) — тянет свежие данные из интернета; без ключа
-    отдаёт знания модели с явной пометкой.
-    """
-    return await _post("/api/chat", {"message": topic, "mode": "research"})
+    return {"documents": await _get("/api/documents")}
 
 
 @mcp.tool()
 async def get_document(doc_id: str) -> dict:
-    """Карточка документа корпуса по id: название, статус, иерархия,
-    ссылка, число чанков, дата индексации. Полный текст документа через
-    API не отдаётся — цитаты бери из ответов search_corpus /
-    check_initiative.
+    """Карточка документа по id: название, статус, иерархия, ссылка,
+    число чанков, дата индексации.
     """
     return await _get(f"/api/documents/{doc_id}")
 
