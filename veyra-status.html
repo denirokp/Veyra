@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veyra — статус-отчёт</title>
+<style>
+  :root{
+    --blue:#00AAFF; --blue-d:#0077B6; --purple:#965EEB;
+    --green:#04C168; --coral:#FF5A5F; --amber:#FFA800;
+    --ink:#15161B; --muted:#5C6270; --line:#E4E7EC; --bg:#F4F6F8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:#0c0d12;color:var(--ink);overflow:hidden;
+  }
+  .deck{height:100vh;width:100vw}
+  .slide{
+    display:none;height:100vh;width:100vw;padding:6vh 7vw;
+    flex-direction:column;justify-content:center;position:relative;
+    background:#fff;
+  }
+  .slide.active{display:flex}
+  .kicker{
+    font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--blue);margin-bottom:14px;
+  }
+  h1{font-size:62px;line-height:1.05;font-weight:800;letter-spacing:-.02em}
+  h2{font-size:44px;line-height:1.1;font-weight:800;letter-spacing:-.02em;margin-bottom:34px}
+  h3{font-size:20px;font-weight:700;margin-bottom:8px}
+  p,li{font-size:21px;line-height:1.5;color:var(--ink)}
+  .muted{color:var(--muted)}
+  .counter{
+    position:absolute;right:34px;bottom:26px;font-size:14px;font-weight:600;
+    color:var(--muted);
+  }
+  .brandmark{
+    position:absolute;left:7vw;bottom:26px;display:flex;align-items:center;gap:8px;
+    font-size:14px;font-weight:700;color:var(--muted);
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--blue);display:inline-block}
+
+  /* ---- cover / section ---- */
+  .cover{
+    background:linear-gradient(135deg,#00AAFF 0%,#0086E0 55%,#6F4FE0 130%);
+    color:#fff;
+  }
+  .cover .kicker{color:rgba(255,255,255,.85)}
+  .cover h1{font-size:84px}
+  .cover .sub{font-size:24px;margin-top:22px;color:rgba(255,255,255,.92);font-weight:500}
+  .cover .who{margin-top:46px;font-size:18px;color:rgba(255,255,255,.78)}
+  .cover .brandmark{color:rgba(255,255,255,.8)}
+  .cover .dot{background:#fff}
+
+  .qa{background:linear-gradient(135deg,#00AAFF 0%,#0086E0 100%);color:#fff;align-items:center;text-align:center}
+  .qa h1{font-size:120px}
+
+  /* ---- two columns ---- */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:42px}
+  .cols.s{grid-template-columns:1.05fr .95fr}
+  ul.clean{list-style:none}
+  ul.clean li{position:relative;padding-left:30px;margin-bottom:16px}
+  ul.clean li::before{
+    content:"";position:absolute;left:0;top:11px;width:11px;height:11px;
+    border-radius:3px;background:var(--blue);
+  }
+  ul.clean li.g::before{background:var(--green)}
+  ul.clean li.a::before{background:var(--amber)}
+  ul.clean li.r::before{background:var(--coral)}
+  ul.clean li.p::before{background:var(--purple)}
+
+  .panel{background:var(--bg);border-radius:18px;padding:30px 30px 24px}
+  .panel .ph{font-size:14px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:18px}
+
+  /* ---- metric cards ---- */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:8px}
+  .card{border:1px solid var(--line);border-radius:16px;padding:22px;border-top:5px solid var(--blue)}
+  .card.green{border-top-color:var(--green)}
+  .card.purple{border-top-color:var(--purple)}
+  .card.amber{border-top-color:var(--amber)}
+  .card.coral{border-top-color:var(--coral)}
+  .card .big{font-size:46px;font-weight:800;letter-spacing:-.02em}
+  .card .lbl{font-size:16px;font-weight:700;margin-top:4px}
+  .card .desc{font-size:14px;color:var(--muted);margin-top:6px;line-height:1.4}
+
+  /* ---- flow ---- */
+  .flow{display:flex;align-items:stretch;gap:14px;margin-top:10px}
+  .flow .step{
+    flex:1;border:1px solid var(--line);border-radius:16px;padding:20px 18px;
+    position:relative;
+  }
+  .flow .step .n{
+    width:30px;height:30px;border-radius:8px;background:var(--blue);color:#fff;
+    font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;
+    margin-bottom:14px;
+  }
+  .flow .arr{display:flex;align-items:center;color:var(--blue);font-size:26px;font-weight:800}
+  .flow .step h3{font-size:18px}
+  .flow .step p{font-size:14px;color:var(--muted);line-height:1.4}
+
+  .layers{display:flex;flex-direction:column;gap:16px;margin-top:6px}
+  .layer{
+    display:flex;align-items:center;gap:24px;border:1px solid var(--line);
+    border-radius:16px;padding:22px 26px;border-left:6px solid var(--blue);
+  }
+  .layer.l2{border-left-color:var(--purple)}
+  .layer.l3{border-left-color:var(--green)}
+  .layer .tag{
+    font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);min-width:120px;
+  }
+  .layer .body h3{font-size:21px;margin-bottom:4px}
+  .layer .body p{font-size:16px;color:var(--muted)}
+
+  /* ---- dark metrics slide ---- */
+  .dark{background:radial-gradient(900px 600px at 75% 18%,#23304F 0%,#0E1320 70%);color:#fff}
+  .dark h2{color:#fff}
+  .dark .kicker{color:#56C8FF}
+  .dark p,.dark li{color:#D6DAE3}
+  .dark .gate{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:10px}
+  .dark .gbox{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+    border-radius:16px;padding:26px 28px}
+  .dark .gbox h3{font-size:18px;color:#fff;margin-bottom:16px}
+  .dark .gbox.pass{border-left:5px solid var(--green)}
+  .dark .gbox.todo{border-left:5px solid var(--amber)}
+  .dark .principle{
+    margin-top:30px;font-size:22px;font-weight:600;color:#fff;
+    border-left:4px solid var(--blue);padding-left:20px;
+  }
+  .pill{display:inline-block;font-size:13px;font-weight:800;padding:4px 11px;border-radius:999px;
+    margin-left:8px;vertical-align:middle}
+  .pill.ok{background:rgba(4,193,104,.18);color:#28E07F}
+  .pill.wip{background:rgba(255,168,0,.18);color:#FFC04D}
+  .pill.no{background:rgba(255,90,95,.18);color:#FF8A8E}
+
+  .note{
+    margin-top:26px;background:#FFF6E5;border:1px solid #FFE2A8;border-radius:14px;
+    padding:18px 22px;font-size:17px;line-height:1.45;
+  }
+  .note b{color:#A86A00}
+
+  .hint{
+    position:absolute;left:50%;bottom:24px;transform:translateX(-50%);
+    font-size:13px;color:#9aa0ac;
+  }
+  .cover .hint,.qa .hint,.dark .hint{color:rgba(255,255,255,.6)}
+
+  @media print{
+    html,body{height:auto;overflow:visible}
+    .slide{display:flex!important;page-break-after:always;height:100vh}
+    .counter,.hint{display:none}
+    @page{size:landscape}
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1. Cover -->
+  <section class="slide cover active">
+    <div class="kicker">Статус-отчёт · май 2026</div>
+    <h1>Veyra</h1>
+    <div class="sub">Claude, который сверяет корпус документов компании<br>на противоречия, обещания и серые зоны</div>
+    <div class="who">Докладчик: ___________ &nbsp;·&nbsp; для: Алексей</div>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="hint">→ / пробел — следующий слайд &nbsp;·&nbsp; F11 — фуллскрин &nbsp;·&nbsp; печать — PDF</div>
+  </section>
+
+  <!-- 2. Контекст -->
+  <section class="slide">
+    <div class="kicker">Контекст</div>
+    <h2>Зачем это нужно</h2>
+    <div class="cols">
+      <div>
+        <h3>Что болело</h3>
+        <ul class="clean">
+          <li>Стратегические документы — планы, инициативы, OKR — расходятся по Confluence и постоянно растут.</li>
+          <li>Числовые расхождения, незакрытые обещания и «серые зоны» между документами не видны и всплывают поздно.</li>
+          <li>Ручная сверка не масштабируется: чем больше корпус, тем меньше реальный охват проверки.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="ph">Гипотеза</div>
+        <p>Если посадить Claude за корпус документов и дать ему инструменты поиска — он сам находит расхождения, обещания и пробелы, со ссылками на источники.</p>
+        <p style="margin-top:14px">Эксперт переключается с рутинной вычитки на разбор готовых находок.</p>
+      </div>
+    </div>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">2 / 10</div>
+  </section>
+
+  <!-- 3. Результат -->
+  <section class="slide">
+    <div class="kicker">Результат</div>
+    <h2>Что сделали</h2>
+    <div class="cols s">
+      <div>
+        <ul class="clean">
+          <li><b>Слой данных:</b> индексация корпуса, гибридный поиск (эмбеддинги + BM25 + RRF), 9 таблиц БД.</li>
+          <li><b>Детекторы («бульон»):</b> числовые расхождения, обещания, логические сигналы — работают на индексации.</li>
+          <li><b>veyra-mcp:</b> 8 инструментов-данных, ноль LLM — чистый фасад к корпусу.</li>
+          <li><b>veyra-skill / SKILL.md:</b> плейбук рассуждения Claude — цитаты, разметка ФАКТ/ГИПОТЕЗА, контракт охвата.</li>
+          <li class="p"><b>Изоляция серверного «мозга»:</b> живой путь = Claude через MCP; legacy-путь выключается флагом.</li>
+          <li class="p"><b>Gap-анализ</b> против AI-экосистемы Avito (MCP Hub, Skills Hub).</li>
+        </ul>
+      </div>
+      <div>
+        <div class="cards" style="grid-template-columns:1fr 1fr">
+          <div class="card"><div class="big">21</div><div class="lbl">числовых расхождений</div><div class="desc">найдено детекторами</div></div>
+          <div class="card purple"><div class="big">19</div><div class="lbl">логических сигналов</div><div class="desc">попарное сравнение документов</div></div>
+          <div class="card green"><div class="big">215</div><div class="lbl">обещаний</div><div class="desc">с дедлайнами и метриками</div></div>
+          <div class="card amber"><div class="big">8</div><div class="lbl">MCP-инструментов</div><div class="desc">данные для Claude, без LLM</div></div>
+        </div>
+        <p class="muted" style="font-size:15px;margin-top:14px">Цель Фазы 1 — recall ≥ 80% на полнотекстовом анализе.</p>
+      </div>
+    </div>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">3 / 10</div>
+  </section>
+
+  <!-- 4. Логика и флоу -->
+  <section class="slide">
+    <div class="kicker">Логика и флоу</div>
+    <h2>Архитектура — три слоя</h2>
+    <div class="layers">
+      <div class="layer">
+        <div class="tag">Слой 1</div>
+        <div class="body">
+          <h3>Движок данных</h3>
+          <p>Индексация корпуса + детекторы (офлайн). Гибридный retrieval. Ноль LLM на живом пути.</p>
+        </div>
+      </div>
+      <div class="layer l2">
+        <div class="tag">Слой 2</div>
+        <div class="body">
+          <h3>veyra-mcp</h3>
+          <p>8 инструментов-данных: search_corpus, find_* (расхождения/обещания), list/get_document, corpus_stats.</p>
+        </div>
+      </div>
+      <div class="layer l3">
+        <div class="tag">Слой 3</div>
+        <div class="body">
+          <h3>Claude + SKILL.md</h3>
+          <p>Рассуждение, синтез ответа, цитаты. Вся «умная» логика — здесь, у модели.</p>
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:24px;font-size:18px">Принцип: данные — на сервере, рассуждение — у модели. Тот же паттерн, что у AI-проектов Avito.</p>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">4 / 10</div>
+  </section>
+
+  <!-- 5. Мини разбор флоу -->
+  <section class="slide">
+    <div class="kicker">Мини разбор флоу</div>
+    <h2>Путь одного запроса</h2>
+    <div class="flow">
+      <div class="step"><div class="n">1</div><h3>Запрос</h3><p>вопрос на русском языке</p></div>
+      <div class="arr">→</div>
+      <div class="step"><div class="n">2</div><h3>Поиск</h3><p>search_corpus / find_* — retrieval, ноль LLM</p></div>
+      <div class="arr">→</div>
+      <div class="step"><div class="n">3</div><h3>Проверка</h3><p>Claude сверяет фрагменты в полном тексте</p></div>
+      <div class="arr">→</div>
+      <div class="step"><div class="n">4</div><h3>Синтез</h3><p>ответ с разметкой ФАКТ / ГИПОТЕЗА</p></div>
+      <div class="arr">→</div>
+      <div class="step"><div class="n">5</div><h3>Цитаты</h3><p>каждое утверждение → ссылка на документ</p></div>
+    </div>
+    <p class="muted" style="margin-top:26px;font-size:18px">Целевой путь: Claude → MCP Hub → veyra-mcp → слой данных. Корпус не покидает периметр без надобности.</p>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">5 / 10</div>
+  </section>
+
+  <!-- 6. Где мы сейчас -->
+  <section class="slide">
+    <div class="kicker">Где мы сейчас</div>
+    <h2>Статус по фазам</h2>
+    <div class="cols s">
+      <div>
+        <ul class="clean">
+          <li class="g"><b>Фаза 1</b> — полнотекстовый retrieval-гейт: <b>закрыта в объёме</b>, 4 / 5 кейсов (5-й — rate-limit, не провал логики).</li>
+          <li class="a"><b>Фаза 1.5</b> — retrieval-гейт: <b>почти закрыта</b>.</li>
+          <li class="r"><b>Фаза 2</b> — валидация детекторов: <b>не начата</b>, precision находок не измерен.</li>
+          <li class="p"><b>Архитектура</b> согласована с паттерном Avito; veyra-skill уже в формате Skills Hub.</li>
+        </ul>
+      </div>
+      <div>
+        <div class="note">
+          <b>Честная оговорка.</b> Гейт мерил recall полнотекстового анализа Claude, а не выход детекторов. Эталон — 5 кейсов, разметка нестрогая. Точность находок (21 / 19 / 215) пока <b>не подтверждена</b>.
+        </div>
+      </div>
+    </div>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">6 / 10</div>
+  </section>
+
+  <!-- 7. Метрики-ворота -->
+  <section class="slide dark">
+    <div class="kicker">Метрики-ворота</div>
+    <h2>Что доказано, что — нет</h2>
+    <div class="gate">
+      <div class="gbox pass">
+        <h3>Пройдено <span class="pill ok">✓</span></h3>
+        <ul class="clean">
+          <li class="g">Фаза 1: recall ≥ 80% — 4 / 5 кейсов на полнотекстовом анализе.</li>
+          <li class="g">Живой путь изолирован: рассуждение вынесено в Claude.</li>
+        </ul>
+      </div>
+      <div class="gbox todo">
+        <h3>Ворота впереди <span class="pill wip">в работе</span></h3>
+        <ul class="clean">
+          <li class="a">Фаза 2: precision детекторов — целевое ≥ 80%, <b>не измерено</b>.</li>
+          <li class="r">Независимая разметка ground truth аналитиком — не сделана.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="principle">«Детекторы должны работать до упаковки в скилл. Если врут — никакая красивость не спасёт.»</div>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">7 / 10</div>
+  </section>
+
+  <!-- 8. Планы -->
+  <section class="slide">
+    <div class="kicker">Что дальше</div>
+    <h2>План по фазам</h2>
+    <div class="cards">
+      <div class="card coral">
+        <div class="lbl" style="font-size:18px">Фаза 2 — Валидация детекторов</div>
+        <div class="desc" style="font-size:15px;margin-top:12px">
+          • eval-харнес + независимый ground truth, замер precision (21 / 19 / 215).<br><br>
+          • регрессионный харнес на изменения SKILL.md.
+        </div>
+        <div class="desc" style="margin-top:14px;font-weight:800;color:var(--coral)">Ворота — приоритет №1</div>
+      </div>
+      <div class="card purple">
+        <div class="lbl" style="font-size:18px">Фаза 3 — Интеграция в Avito</div>
+        <div class="desc" style="font-size:15px;margin-top:12px">
+          • регистрация veyra-mcp за MCP Hub — единый OAuth/Keycloak, PII-анонимизация.<br><br>
+          • публикация veyra-skill в Skills Hub.
+        </div>
+      </div>
+      <div class="card">
+        <div class="lbl" style="font-size:18px">Фаза 4 — Эксплуатация</div>
+        <div class="desc" style="font-size:15px;margin-top:12px">
+          • мониторинг стоимости вызовов (6–10 tool-calls на запрос).<br><br>
+          • живой ROADMAP вместо снимка статуса.
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:24px;font-size:17px">Очередь зафиксирована gap-анализом против Avito: Фаза 2 — ворота, без неё Фаза 3 преждевременна.</p>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">8 / 10</div>
+  </section>
+
+  <!-- 9. Переиспользование -->
+  <section class="slide">
+    <div class="kicker">Как это переиспользовать</div>
+    <h2>Паттерн шире одного проекта</h2>
+    <div class="cols">
+      <div>
+        <h3>Подходит для</h3>
+        <ul class="clean">
+          <li>любого корпуса документов, где нужна сверка на противоречия и контроль обещаний;</li>
+          <li>команд, которым важен охват проверки, а не выборочная ручная вычитка.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <div class="ph">Принцип переиспользования</div>
+        <p>veyra-skill — устанавливаемый скилл формата Skills Hub.</p>
+        <p style="margin-top:12px">Данные — за MCP, рассуждение — у Claude. Дашборды и метрики подключаются отдельными MCP (dwh-redash, grafana) и не дублируются в Veyra.</p>
+      </div>
+    </div>
+    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="counter">9 / 10</div>
+  </section>
+
+  <!-- 10. Q&A -->
+  <section class="slide qa">
+    <h1>Q&amp;A</h1>
+    <div class="hint">← → — навигация</div>
+  </section>
+
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0;
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+  }
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','ArrowDown',' ','PageDown'].includes(e.key)){e.preventDefault();show(i+1);}
+    if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();show(i-1);}
+    if(e.key==='Home')show(0);
+    if(e.key==='End')show(slides.length-1);
+  });
+  document.addEventListener('click',e=>{
+    if(e.clientX < window.innerWidth*0.28) show(i-1); else show(i+1);
+  });
+  show(0);
+</script>
+</body>
+</html>
