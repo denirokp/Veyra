@@ -16,12 +16,15 @@ Claude / Avito AI ──MCP (streamable-http)──> veyra-mcp ──HTTP──>
 
 ## Статус: alpha
 
-Реальная логика движка уже подключена (проксирование), но сервис
-**не регистрируется в production mcp-registry** до полного прохождения
-retrieval-гейта (ТЗ Принцип 1). Инструменты `find_contradictions` /
-`find_gaps` / `find_open_promises` / `corpus_stats` / `get_document`
-читают предвычисленные данные и безопасны; `search_corpus` и
-`check_initiative` запускают LLM-логику движка.
+Все 8 инструментов — **чистые data-вызовы (GET к движку), ноль LLM на
+стороне `veyra-mcp`.** Это и есть соответствие ТЗ, Принцип 1: на живом
+пути MCP не запускает рассуждение, только подаёт предвычисленные данные
+и фрагменты корпуса. `search_corpus` отдаёт сырьё retrieval (без
+синтеза); рассуждение делает Claude.
+
+Сервис **не регистрируется в production mcp-registry** до полного
+прохождения retrieval-гейта (ТЗ, Принцип 1) — этап alpha, доступ только
+разработчикам.
 
 ## Запуск
 
@@ -41,20 +44,22 @@ VEYRA_BACKEND_URL=http://localhost:8000 python server.py
 | `VEYRA_BACKEND_URL` | адрес движка Veyra | `http://localhost:8000` |
 | `VEYRA_BACKEND_TOKEN` | bearer-токен бэкенда (если включён `API_AUTH_TOKEN`) | пусто |
 | `VEYRA_MCP_HOST` / `VEYRA_MCP_PORT` | адрес самого MCP-сервера | `0.0.0.0` / `8765` |
-| `VEYRA_HTTP_TIMEOUT` | таймаут запроса к бэкенду, сек | `240` |
+| `VEYRA_HTTP_TIMEOUT` | таймаут запроса к бэкенду, сек | `60` |
 
 ## Инструменты
 
-| Инструмент | Что делает | Бэкенд |
+8 инструментов (соответствуют `server.py`), все — `GET` к движку:
+
+| Инструмент | Что отдаёт | Бэкенд |
 |---|---|---|
-| `search_corpus` | поиск по памяти — «что мы знаем про X» | `POST /api/chat` (search) |
-| `check_initiative` | сверка инициативы с корпусом | `POST /api/chat` (validate) |
-| `find_contradictions` | известные расхождения | `GET /api/contradictions` |
-| `find_open_promises` | незакрытые обещания | `GET /api/promises` |
-| `find_gaps` | серые зоны | `GET /api/docs/gaps` |
-| `get_document` | полный документ по id | `GET /api/documents/{id}` |
-| `corpus_stats` | сводка по корпусу | `GET /api/docs/stats` |
-| `health` | доступность движка | `GET /health` |
+| `search_corpus(query, top_k)` | релевантные фрагменты корпуса (сырьё) | `GET /api/retrieve` |
+| `find_numeric_contradictions()` | таблица числовых расхождений | `GET /api/contradictions/numeric` |
+| `find_logic_contradictions()` | таблица логических расхождений | `GET /api/contradictions/logic` |
+| `find_open_promises()` | незакрытые обещания | `GET /api/promises` |
+| `list_documents()` | список документов корпуса | `GET /api/documents` |
+| `get_document(doc_id)` | полный текст документа по id | `GET /api/documents/{id}/text` |
+| `corpus_stats()` | сводка по корпусу | `GET /api/docs/stats` |
+| `health()` | доступность движка | `GET /health` |
 
 ## Подключение из Claude
 
