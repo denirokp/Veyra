@@ -163,8 +163,12 @@ async def main():
     print(f"  логические сигналы   : {len(signals)}")
     print(f"  обещания             : {len(promises)}")
     if not (contradictions or signals or promises):
-        print("  ⚠️  Все три пусты — background-skills ничего не записали. "
-              "Проверь ENABLE_BACKGROUND_SIGNALS и INFO-строки 'skill ... → N'.")
+        if not settings.ENABLE_BACKGROUND_SIGNALS:
+            print("  (детекторы отключены: ENABLE_BACKGROUND_SIGNALS=false — "
+                  "норма для быстрой загрузки корпуса; «бульон» варится позже)")
+        else:
+            print("  ⚠️  Все три пусты, хотя ENABLE_BACKGROUND_SIGNALS=true — "
+                  "background-skills упали. Смотри INFO-строки 'skill ... → N'.")
 
 
 if __name__ == "__main__":
