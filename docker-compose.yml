@@ -55,6 +55,25 @@ services:
       interval: 30s
       timeout: 3s
 
+  # MCP-сервер Veyra — тонкий фасад над backend, отдаёт корпоративную
+  # память как MCP-инструменты. В сети compose backend доступен как
+  # http://backend:8000.
+  veyra-mcp:
+    build:
+      context: ./veyra-mcp
+      dockerfile: Dockerfile
+    container_name: veyra-mcp
+    restart: unless-stopped
+    environment:
+      VEYRA_BACKEND_URL: http://backend:8000
+      VEYRA_MCP_HOST: 0.0.0.0
+      VEYRA_MCP_PORT: "8765"
+    ports:
+      - "8765:8765"
+    depends_on:
+      backend:
+        condition: service_started
+
 volumes:
   # БД, Chroma, файлы документов
   veyra-data:
