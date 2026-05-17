@@ -98,10 +98,11 @@ async def list_documents() -> dict:
 
 @mcp.tool()
 async def get_document(doc_id: str) -> dict:
-    """Карточка документа по id: название, статус, иерархия, ссылка,
-    число чанков, дата индексации.
+    """Полный текст документа корпуса по id — чтобы вчитаться в один
+    документ целиком (агентный разбор, проверка цитаты). id берётся из
+    search_corpus или list_documents.
     """
-    return await _get(f"/api/documents/{doc_id}")
+    return await _get(f"/api/documents/{doc_id}/text")
 
 
 @mcp.tool()

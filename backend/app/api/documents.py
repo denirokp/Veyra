@@ -189,6 +189,22 @@ async def get_doc(doc_id: str, db: AsyncSession = Depends(get_session)):
     return _to_out(doc)
 
 
+@router.get("/documents/{doc_id}/text")
+async def get_doc_text(doc_id: str, db: AsyncSession = Depends(get_session)):
+    """Полный распарсенный текст документа — для агентного чтения Claude
+    (вчитаться в конкретный документ целиком, проверить цитату)."""
+    doc = await get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(404, "Документ не найден")
+    return {
+        "id": doc.id,
+        "title": doc.title,
+        "status": doc.status,
+        "text": doc.parsed_text or "",
+        "has_text": bool(doc.parsed_text),
+    }
+
+
 @router.patch("/documents/{doc_id}", response_model=DocumentOut)
 async def patch_doc(
     doc_id: str,
