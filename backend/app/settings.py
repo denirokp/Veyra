@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     # (logic signals — pairwise сравнение пар документов).
     DISABLE_LOGIC_SIGNALS: bool = False
 
+    # Числовой детектор расхождений (extract_entities → find_contradictions
+    # и numeric-часть find_intra_contradictions). Отключён по умолчанию:
+    # на валидации (scripts/eval_detectors.py) дал precision 11% — фабрикует
+    # несуществующие значения, не нормализует единицы/округление, путает
+    # «план vs факт». Числовые расхождения ищет Claude на запросе (целевая
+    # архитектура; гейт Фазы 1 это подтвердил). Логический и promise-детекторы
+    # валидацию прошли (83% / 94%) и работают штатно.
+    ENABLE_NUMERIC_CONTRADICTIONS: bool = False
+
     # При индексации запускать background-skills (extract_entities →
     # числовые расхождения, track_promises, find_logic_signals) и генерацию
     # document brief. Это и есть "бульон" — без них система работает как

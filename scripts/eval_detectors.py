@@ -47,8 +47,10 @@ TYPES = ("numeric", "logic", "promises")
 JUDGE_SYSTEM = (
     "Ты — независимый проверяющий (LLM-judge). Тебе дают НАХОДКУ детектора "
     "и фрагменты документов-источников. Реши, верна ли находка.\n"
-    "Отвечай строго JSON без markdown: "
-    '{"verdict": "confirmed"|"rejected"|"unclear", "reason": "<кратко>"}.\n'
+    "ФОРМАТ ОТВЕТА: ровно один JSON-объект, без markdown и без рассуждений "
+    "вне его. Первый символ ответа — `{`. Всё объяснение помести внутрь "
+    "поля reason, 1–2 предложения.\n"
+    '{"verdict": "confirmed"|"rejected"|"unclear", "reason": "<кратко>"}\n'
     "confirmed — находка фактически подтверждается источниками.\n"
     "rejected — находка неверна: искажение цитаты, не тот смысл, выдумка, "
     "ложное противоречие (разные периоды/сегменты, «план vs факт»).\n"
@@ -108,7 +110,7 @@ def _llm_judge(user: str, *, model: str, api_key: str, base_url: str) -> str:
     body = json.dumps({
         "model": model,
         "temperature": 0,
-        "max_tokens": 500,
+        "max_tokens": 1024,
         "messages": [
             {"role": "system", "content": JUDGE_SYSTEM},
             {"role": "user", "content": user},

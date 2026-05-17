@@ -25,7 +25,7 @@
 | ТЗ v1.4, `gate_report.md` | ✅ зафиксированы честно, с границами |
 | Изоляция серверного «мозга» | ✅ флаг `ENABLE_LEGACY_CHAT` — `POST /api/chat` (orchestrator + docs-agent) помечен LEGACY, нужен только React-панели; живой путь — Claude через veyra-mcp |
 | Gap-анализ против Avito | ✅ `docs/GAP-ANALYSIS-AVITO.md` — 7 гэпов vs MCP Hub / Skills Hub, приоритет и этапы закрытия |
-| Каркас eval-харнеса (G1) | ✅ `scripts/eval_detectors.py` — precision детекторов через LLM-judge. ⚠️ не прогнан: нужен бэкенд + корпус + `LLM_API_KEY` |
+| Eval-харнес (G1) — прогнан | ✅ precision на выборке (3 документа, судья claude-sonnet-4-6): обещания **94%**, логические сигналы **83%**, числовые расхождения **11%**. Числовой детектор отключён флагом `ENABLE_NUMERIC_CONTRADICTIONS=0` — фабрикует значения; числовые расхождения ищет Claude на запросе |
 | Регрессионный харнес (G4) | ✅ `scripts/regression.py` + git-хук `scripts/hooks/pre-push`; `run_gate.py` пишет `gate_summary.json`. ⚠️ baseline не заведён |
 
 **Главное за сессию:** на гейте Claude, рассуждая над полным текстом

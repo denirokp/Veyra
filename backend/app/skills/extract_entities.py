@@ -18,6 +18,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients import call_llm, fast_model, parse_json_array
+from app.settings import settings
 from app.skills.find_contradictions import check_and_save_contradictions
 from app.storage.sql_db import save_entities
 
@@ -305,8 +306,12 @@ async def extract_and_save(
 
     await save_entities(db, rows)
 
-    metrics = [r for r in rows if r["type"] == "metric"]
-    if metrics:
-        await check_and_save_contradictions(metrics, document_id, db)
+    # Числовой детектор расхождений отключён по умолчанию: на валидации
+    # (scripts/eval_detectors.py) дал precision 11%. Числовые расхождения
+    # ищет Claude на запросе. Флаг ENABLE_NUMERIC_CONTRADICTIONS в settings.py.
+    if settings.ENABLE_NUMERIC_CONTRADICTIONS:
+        metrics = [r for r in rows if r["type"] == "metric"]
+        if metrics:
+            await check_and_save_contradictions(metrics, document_id, db)
 
     return rows

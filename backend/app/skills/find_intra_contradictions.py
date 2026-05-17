@@ -22,6 +22,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients import call_llm, parse_json_array
+from app.settings import settings
 from app.storage.sql_db import save_contradiction, save_logic_signals
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,10 @@ async def find_intra_contradictions(
         ftype = (f.get("type") or "").strip().lower()
         conf = float(f.get("confidence", 0.7) or 0.7)
         if ftype == "numeric":
+            # Числовой детектор отключён по умолчанию (precision 11% на
+            # валидации) — см. ENABLE_NUMERIC_CONTRADICTIONS в settings.py.
+            if not settings.ENABLE_NUMERIC_CONTRADICTIONS:
+                continue
             numeric_rows.append({
                 "id": str(uuid.uuid4()),
                 "metric": f.get("metric") or "внутреннее числовое расхождение",
