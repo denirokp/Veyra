@@ -80,10 +80,17 @@ def _answer_blob(data: dict) -> str:
 
 
 def _score(key: str, data: dict, gt: dict):
-    """Возвращает (hit: bool|None, matched_group). None — нет разметки."""
+    """Возвращает (hit: bool|None, matched_group). None — нет разметки.
+
+    Повреждённый структурированный ответ НЕ засчитывается как hit: гейт
+    требует находку с цитатами (facts), а спасённый текст их не несёт.
+    """
     spec = gt.get(key)
     if not spec:
         return None, None
+    warns = " ".join(data.get("warnings") or []).lower()
+    if "повреждён" in warns or "не удалось разобрать" in warns:
+        return False, "PARSE-FAIL"
     blob = _answer_blob(data)
     for group in spec["any_of"]:
         if all(tok.lower() in blob for tok in group):

@@ -361,16 +361,42 @@ async def _parse_llm_response(
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group())
-            except json.JSONDecodeError as e:
-                logger.warning("docs_agent: regex-fallback не распарсился: %s | head=%r", e, raw[:200])
-                return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], [], 0
-        else:
-            logger.warning("docs_agent: невалидный JSON | head=%r", raw[:200])
-            return raw, [], [], ["⚠️ Не удалось разобрать структурированный ответ"], [], 0
+        data = None
+        text = raw.strip()
+        # Снимаем markdown-обёртку ```json ... ```
+        if text.startswith("```"):
+            text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+            text = re.sub(r"\n?```\s*$", "", text).strip()
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group())
+                except json.JSONDecodeError:
+                    data = None
+        if data is None:
+            # Спасение: JSON-объект повреждён (LLM иногда ломает синтаксис в
+            # длинном answer). Вытаскиваем хотя бы текст answer, чтобы юзер
+            # видел осмысленный ответ, а не сырой JSON-дамп.
+            am = re.search(r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
+            salvaged = ""
+            if am:
+                try:
+                    salvaged = json.loads('"' + am.group(1) + '"')
+                except json.JSONDecodeError:
+                    salvaged = am.group(1)
+            logger.warning("docs_agent: JSON-объект повреждён, answer спасён частично | head=%r", raw[:200])
+            return (
+                salvaged or text,                       # answer
+                [],                                     # facts
+                [],                                     # hypotheses
+                ["⚠️ Структурированный ответ повреждён — показан только текст, "
+                 "без разбивки на источники"],          # warnings
+                [],                                     # requires_verification
+                0,                                      # dropped
+            )
 
     # Пост-фильтр: вычищаем артефакты типа [Источник 5] / (Source 7) / [doc:abc]
     # которые LLM иногда вставляет в free-text вопреки правилам в system prompt.
