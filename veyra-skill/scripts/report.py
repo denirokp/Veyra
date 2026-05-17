@@ -1,7 +1,11 @@
-"""Сборка Confluence-отчёта по результату veyra-mcp.check_initiative.
+"""Сборка Confluence-страницы по результату инструмента veyra
+(check_initiative / search_corpus).
 
-ЧЕРНОВИК (Фаза 1, Трек F). Формат — 3-колоночная таблица как у скилла
-quality-metrics: Расхождение | Источник | Рекомендация. Только stdlib.
+Формат — заголовок + ответ + таблица расхождений + источники, по
+образцу скилла quality-metrics. Только stdlib.
+
+Вход (stdin): JSON-ответ инструмента veyra — структура движка:
+{answer, facts[], warnings[], hypotheses[], requires_verification[], metadata}.
 """
 from __future__ import annotations
 
@@ -10,33 +14,59 @@ import sys
 
 
 def build_report(result: dict) -> str:
-    """result — ответ check_initiative. Возвращает Confluence-разметку."""
-    if result.get("stub"):
+    if result.get("error"):
         return (
             "h2. Veyra — отчёт\n\n"
-            "{warning}veyra-mcp в skeleton-режиме (Фаза 1): реальных находок "
-            "пока нет. Отчёт станет содержательным после Фазы 2.{warning}\n"
+            f"{{warning}}Veyra недоступна: {result['error']}{{warning}}\n"
         )
-    findings = result.get("findings", [])
-    lines = [
-        "h2. Veyra — расхождения с корпусом",
-        "",
-        "|| Расхождение || Источник || Рекомендация ||",
-    ]
-    for f in findings:
+
+    answer = (result.get("answer") or "").strip()
+    warnings = result.get("warnings") or []
+    facts = result.get("facts") or []
+    requires = result.get("requires_verification") or []
+
+    lines = ["h2. Veyra — сверка с корпоративной памятью", ""]
+    if answer:
+        lines += [answer, ""]
+
+    lines.append("h3. Расхождения и риски")
+    if warnings:
+        lines.append("|| Находка ||")
+        for w in warnings:
+            lines.append(f"| {w} |")
+    else:
+        lines.append("В проверенном объёме расхождений не выявлено.")
+    lines.append("")
+
+    if facts:
+        lines.append("h3. Источники")
+        for f in facts:
+            src = f.get("source") or {}
+            title = src.get("title", "?")
+            section = src.get("section")
+            ref = f"{title}{' / ' + section if section else ''}"
+            lines.append(f"* {f.get('statement', '')} — _{ref}_")
+        lines.append("")
+
+    if requires:
+        lines.append("h3. Что проверить")
+        for r in requires:
+            lines.append(f"* {r}")
+        lines.append("")
+
+    cov = (result.get("metadata") or {}).get("coverage") or {}
+    if cov:
         lines.append(
-            f"| {f.get('statement', '')} "
-            f"| {f.get('source', '')} "
-            f"| {f.get('recommendation', '')} |"
+            f"_Охват: {cov.get('documents_in_context', '?')} из "
+            f"{cov.get('documents_total', '?')} документов, режим "
+            f"{cov.get('context_mode', '?')}._"
         )
-    if not findings:
-        lines.append("| Расхождений не найдено | — | — |")
     return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":
     raw = sys.stdin.read()
     if not raw.strip():
-        print("Передай JSON-ответ check_initiative через stdin")
+        print("Передай JSON-ответ инструмента veyra через stdin")
         sys.exit(1)
     print(build_report(json.loads(raw)))
