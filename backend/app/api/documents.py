@@ -217,11 +217,18 @@ async def reindex_doc(
     db: AsyncSession = Depends(get_session),
 ):
     """Перезапустить индексацию документа — например после правки парсера
-    или если предыдущий прогон упал. Очищает старые чанки из Chroma и SQL
-    и стартует новую индексацию по сохранённому файлу на диске."""
+    или если предыдущий прогон упал. Очищает старые чанки И выходы skill'ов
+    (entities/promises/contradictions/signals) — иначе повторная индексация
+    их задвоит, т.к. skills только добавляют записи."""
     from app.storage import vector_db
-    from sqlalchemy import delete
-    from app.storage.sql_db import Chunk as ChunkRow
+    from sqlalchemy import delete, or_
+    from app.storage.sql_db import (
+        Chunk as ChunkRow,
+        Entity,
+        LogicSignal,
+        NumericContradiction,
+        Promise,
+    )
 
     doc = await get_document(db, doc_id)
     if not doc:
@@ -240,11 +247,21 @@ async def reindex_doc(
         "hierarchy_level": doc.hierarchy_level,
     }
 
-    # Чистим только чанки и связанные индексы — сам Document, entities,
-    # promises и contradictions оставляем (они частично могут быть useful).
+    # Чанки из Chroma + SQL.
     vector_db.delete_document_chunks(doc_id, "actual")
     vector_db.delete_document_chunks(doc_id, "archive")
     await db.execute(delete(ChunkRow).where(ChunkRow.document_id == doc_id))
+    # Выходы skill'ов — иначе re-index задвоит сущности/обещания/расхождения.
+    await db.execute(delete(Entity).where(Entity.document_id == doc_id))
+    await db.execute(delete(Promise).where(Promise.document_id == doc_id))
+    await db.execute(delete(NumericContradiction).where(or_(
+        NumericContradiction.document_id_a == doc_id,
+        NumericContradiction.document_id_b == doc_id,
+    )))
+    await db.execute(delete(LogicSignal).where(or_(
+        LogicSignal.document_id_a == doc_id,
+        LogicSignal.document_id_b == doc_id,
+    )))
     doc = await update_document(db, doc_id, {"chunk_count": 0})
 
     background_tasks.add_task(_index_in_background, Path(file_path), doc_id, metadata)

@@ -597,7 +597,11 @@ async def run(
             get_all_document_briefs,
             get_all_document_full_texts,
         )
-        full_texts = await get_all_document_full_texts(db, statuses=["actual"], limit=20)
+        # actual + unknown: загруженные через upload документы по умолчанию
+        # имеют статус "unknown", но их чанки уже лежат в actual-коллекции
+        # (_collection_for_status). Без "unknown" full-mode их бы не видел.
+        full_texts = await get_all_document_full_texts(
+            db, statuses=["actual", "unknown"], limit=20)
         total = sum(len(t) for _, t in full_texts)
         n_docs = len(full_texts)
 
@@ -611,7 +615,8 @@ async def run(
             logger.info("full-mode: using %d full texts (%d chars total)", n_docs, total)
         else:
             # Стратегия 2 vs 3: проверяем сколько brief'ов есть
-            briefs = await get_all_document_briefs(db, statuses=["actual"], limit=500)
+            briefs = await get_all_document_briefs(
+                db, statuses=["actual", "unknown"], limit=500)
             briefs_total = sum(len(b) for _, b in briefs)
 
             # Стратегия 3: корпус большой — переходим в deep_research.

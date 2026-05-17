@@ -118,8 +118,10 @@ async def find_gaps() -> dict:
 
 @mcp.tool()
 async def get_document(doc_id: str) -> dict:
-    """Полный документ корпуса по его id — для проверки цитат и
-    контекста находок.
+    """Карточка документа корпуса по id: название, статус, иерархия,
+    ссылка, число чанков, дата индексации. Полный текст документа через
+    API не отдаётся — цитаты бери из ответов search_corpus /
+    check_initiative.
     """
     return await _get(f"/api/documents/{doc_id}")
 
