@@ -315,7 +315,7 @@ def _build_entity_memory_block(
 
     if entities:
         lines.append("Метрики и сущности:")
-        for e in entities[:15]:
+        for e in entities[:25]:
             val = f" = {e.value}" if e.value else ""
             unit = f" {e.unit}" if e.unit else ""
             date = f" ({e.date_context})" if e.date_context else ""
@@ -329,7 +329,7 @@ def _build_entity_memory_block(
 
     if contradictions:
         lines.append("Известные числовые расхождения по этим документам:")
-        for c in contradictions[:5]:
+        for c in contradictions[:25]:
             lines.append(
                 f"  ⚠ {c.metric}: {c.value_a} vs {c.value_b} "
                 f"[{_loc(c.document_id_a, c.document_id_b)}]"
@@ -337,7 +337,7 @@ def _build_entity_memory_block(
 
     if logic_signals:
         lines.append("Известные логические расхождения (смысловые) по этим документам:")
-        for s in logic_signals[:5]:
+        for s in logic_signals[:15]:
             kind = f"{s.signal_type} · " if s.signal_type else ""
             lines.append(
                 f"  ⚠ {kind}«{s.statement_a}» ↔ «{s.statement_b}» "
