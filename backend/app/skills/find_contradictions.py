@@ -9,7 +9,8 @@
 
 Принцип — precision важнее recall. При любой неоднозначности (не удалось
 распарсить значение или единицу, не совпали период или размерность) пара
-пропускается. Чего детектор не поймал — найдёт Claude на запросе.
+пропускается. Имя с ≥3 значениями в один период — перегружено (таблица или
+точки траектории), не флагуется. Чего детектор не поймал — найдёт Claude.
 
 Старая схема (LLM-зависимая + fuzzy-матч имён по обрезкам контекста) давала
 precision 11% на валидации: фабриковала значения, не нормализовала единицы,
@@ -30,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 # Относительный допуск: расхождение меньше — это округление, не противоречие.
 REL_TOLERANCE = 0.02
+
+# Под одним именем в совместимый период ≥ этого числа разных значений —
+# имя перегружено (таблица-разбивка/точки траектории), пары не флагуются.
+OVERLOADED_NAME_MIN_VALUES = 3
 
 
 # ── Парсинг числового значения ────────────────────────────────────────────────
@@ -262,7 +267,28 @@ async def check_and_save_contradictions(
         value_a, kind_a = canon_a
         metric_id = metric.get("id")
 
-        for existing in await _same_name_metrics(db, normalized):
+        same_name = await _same_name_metrics(db, normalized)
+
+        # Гард перегруженного имени. Если под одним нормализованным именем в
+        # совместимый период и с той же размерностью набирается ≥3 РАЗНЫХ
+        # значения — это таблица-разбивка или точки траектории (десятки
+        # ячеек «GMV CY'23» по категориям, ramp плана 1.2→1.7→…→8), а не
+        # пара противоречащих чисел. На корпусе 28 документов так набегало
+        # 54 ложные пары. Перегруженное имя → пропускаем целиком.
+        cluster = {value_a}
+        for other in same_name:
+            if other.id == metric_id:
+                continue
+            canon_o = _canonical(other.value, other.unit)
+            if canon_o is None or canon_o[1] != kind_a:
+                continue
+            if _same_period(metric.get("date_context"),
+                            str(other.date_context or "")):
+                cluster.add(canon_o[0])
+        if len(cluster) >= OVERLOADED_NAME_MIN_VALUES:
+            continue
+
+        for existing in same_name:
             if existing.id == metric_id:
                 continue  # сама с собой
             pair = frozenset((metric_id, existing.id))

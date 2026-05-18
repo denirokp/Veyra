@@ -26,6 +26,7 @@ os.chdir(BACKEND_DIR)
 from sqlalchemy import select  # noqa: E402
 
 from app.skills.find_contradictions import (  # noqa: E402
+    OVERLOADED_NAME_MIN_VALUES,
     _canonical,
     _parse_period,
     _same_period,
@@ -57,17 +58,43 @@ async def main() -> None:
     flagged = 0
     suppressed_noperiod = 0   # обе метрики без периода — это и есть удалённый шум
     suppressed_period = 0     # период есть, но не совпал (старый код тоже подавлял)
+    suppressed_overloaded = 0  # перегруженное имя (≥3 значений) — таблица/серия
     per_doc: Counter = Counter()
     severities: Counter = Counter()
     flagged_pairs: list[dict] = []
 
     for norm, group in by_name.items():
-        for a, b in combinations(group, 2):
-            canon_a = _canonical(a.value, a.unit)
-            canon_b = _canonical(b.value, b.unit)
-            if canon_a is None or canon_b is None:
+        canons = {}
+        for m in group:
+            c = _canonical(m.value, m.unit)
+            if c is not None:
+                canons[m.id] = c
+
+        # Перегруженные имена: метрика, у которой в совместимый период и ту
+        # же размерность набирается ≥OVERLOADED_NAME_MIN_VALUES разных значений.
+        overloaded: set = set()
+        for m in group:
+            if m.id not in canons:
                 continue
-            (val_a, kind_a), (val_b, kind_b) = canon_a, canon_b
+            val_m, kind_m = canons[m.id]
+            cluster = {val_m}
+            for o in group:
+                if o.id == m.id or o.id not in canons:
+                    continue
+                val_o, kind_o = canons[o.id]
+                if kind_o != kind_m:
+                    continue
+                if _same_period(str(m.date_context or ""),
+                                str(o.date_context or "")):
+                    cluster.add(val_o)
+            if len(cluster) >= OVERLOADED_NAME_MIN_VALUES:
+                overloaded.add(m.id)
+
+        for a, b in combinations(group, 2):
+            if a.id not in canons or b.id not in canons:
+                continue
+            (val_a, kind_a) = canons[a.id]
+            (val_b, kind_b) = canons[b.id]
             if kind_a != kind_b:
                 continue
             if not _values_differ(val_a, val_b):
@@ -75,34 +102,41 @@ async def main() -> None:
 
             date_a = str(a.date_context or "")
             date_b = str(b.date_context or "")
-            if _same_period(date_a, date_b):
-                flagged += 1
-                severities[_severity(val_a, val_b)] += 1
-                per_doc[a.document_id] += 1
-                if b.document_id != a.document_id:
-                    per_doc[b.document_id] += 1
-                flagged_pairs.append({
-                    "norm": norm,
-                    "name_a": a.name, "value_a": a.value, "unit_a": a.unit,
-                    "name_b": b.name, "value_b": b.value, "unit_b": b.unit,
-                    "period_a": date_a or "—", "period_b": date_b or "—",
-                    "severity": _severity(val_a, val_b),
-                    "same_doc": a.document_id == b.document_id,
-                    "doc": titles.get(a.document_id, a.document_id)[:48],
-                })
-            elif _parse_period(date_a)[0] is None and _parse_period(date_b)[0] is None:
-                suppressed_noperiod += 1
-            else:
-                suppressed_period += 1
+            if not _same_period(date_a, date_b):
+                if (_parse_period(date_a)[0] is None
+                        and _parse_period(date_b)[0] is None):
+                    suppressed_noperiod += 1
+                else:
+                    suppressed_period += 1
+                continue
+            if a.id in overloaded or b.id in overloaded:
+                suppressed_overloaded += 1
+                continue
 
-    old_total = flagged + suppressed_noperiod
+            flagged += 1
+            severities[_severity(val_a, val_b)] += 1
+            per_doc[a.document_id] += 1
+            if b.document_id != a.document_id:
+                per_doc[b.document_id] += 1
+            flagged_pairs.append({
+                "norm": norm,
+                "name_a": a.name, "value_a": a.value, "unit_a": a.unit,
+                "name_b": b.name, "value_b": b.value, "unit_b": b.unit,
+                "period_a": date_a or "—", "period_b": date_b or "—",
+                "severity": _severity(val_a, val_b),
+                "same_doc": a.document_id == b.document_id,
+                "doc": titles.get(a.document_id, a.document_id)[:48],
+            })
+
+    old_total = flagged + suppressed_noperiod + suppressed_overloaded
     print("=" * 60)
     print(f"Метрик в базе:                 {len(metrics)}")
     print(f"Уникальных имён метрик:        {len(by_name)}")
     print("-" * 60)
-    print(f"Флагуется СЕЙЧАС (с фиксом):    {flagged}")
-    print(f"Подавлено фиксом (период None): {suppressed_noperiod}")
-    print(f"= было бы до фикса:            {old_total}")
+    print(f"Флагуется СЕЙЧАС (period + гард ≥3): {flagged}")
+    print(f"Подавлено гардом ≥3 (таблица/серия): {suppressed_overloaded}")
+    print(f"Подавлено period-фиксом (период None): {suppressed_noperiod}")
+    print(f"= было бы до обоих фиксов:           {old_total}")
     print(f"(подавлено по несовпавшему периоду, старый код тоже: {suppressed_period})")
     print("-" * 60)
     print("Severity флагованных:", dict(severities))
