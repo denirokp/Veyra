@@ -1,15 +1,25 @@
-"""Skill: find_contradictions — поиск числовых расхождений между документами.
+"""Skill: find_contradictions — детерминированный поиск числовых расхождений.
 
-Улучшения:
-- _same_period: понимает год, месяц, квартал. «Q1 2025» vs «Q3 2025» → разные периоды.
-- Поиск по сущностям: fuzzy match имён метрик через difflib (0.85 threshold).
+БЕЗ LLM. Сравнивает метрики-сущности (таблица Entity) попарно: одна и та же
+метрика (точное совпадение нормализованного имени) с разными значениями в
+совместимый период и при сопоставимой размерности → числовое расхождение.
+
+Покрывает И кросс-документные, И внутридокументные расхождения: сущность из
+того же документа сравнивается так же, как из другого.
+
+Принцип — precision важнее recall. При любой неоднозначности (не удалось
+распарсить значение или единицу, не совпали период или размерность) пара
+пропускается. Чего детектор не поймал — найдёт Claude на запросе.
+
+Старая схема (LLM-зависимая + fuzzy-матч имён по обрезкам контекста) давала
+precision 11% на валидации: фабриковала значения, не нормализовала единицы,
+склеивала разные периоды. Переписано на эту детерминированную схему.
 """
 from __future__ import annotations
 
 import logging
 import re
 import uuid
-from difflib import SequenceMatcher
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,29 +28,123 @@ from app.storage.sql_db import Entity, save_contradiction
 
 logger = logging.getLogger(__name__)
 
-FUZZY_THRESHOLD = 0.85  # similarity ratio для имён метрик
+# Относительный допуск: расхождение меньше — это округление, не противоречие.
+REL_TOLERANCE = 0.02
 
 
-# ── Сравнение значений ────────────────────────────────────────────────────────
+# ── Парсинг числового значения ────────────────────────────────────────────────
 
-def _values_conflict(val_a: str | None, val_b: str | None) -> bool:
-    """Грубое сравнение числовых значений. True если расхождение > 5%."""
-    if not val_a or not val_b:
-        return False
+def _parse_number(raw) -> float | None:
+    """Достаёт число из строки. '4,2'→4.2, '1 234'→1234, '~33.3'→33.3.
+    None — если числа нет."""
+    if raw is None:
+        return None
+    s = str(raw).strip().lower().replace(" ", " ")
+    if not s:
+        return None
+    # пробел как разделитель тысяч между цифрами → убрать
+    s = re.sub(r"(?<=\d)[  ](?=\d)", "", s)
+    s = s.replace(",", ".")
+    m = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+    if not m:
+        return None
     try:
-        a = float(str(val_a).replace(",", ".").replace("%", "").strip())
-        b = float(str(val_b).replace(",", ".").replace("%", "").strip())
-        if a == 0 and b == 0:
-            return False
-        diff = abs(a - b) / (max(abs(a), abs(b)) or 1)
-        return diff > 0.05
-    except (ValueError, TypeError):
-        return str(val_a).strip().lower() != str(val_b).strip().lower()
+        return float(m.group())
+    except ValueError:
+        return None
 
 
-# ── Парсер периодов ──────────────────────────────────────────────────────────
+# ── Размерность и масштаб единицы ─────────────────────────────────────────────
 
-_QUARTER_RE = re.compile(r"q\s*([1-4])\s*[/\-' ]?\s*(\d{2,4})|(\d{2,4})\s*[/\-' ]?\s*q\s*([1-4])", re.IGNORECASE)
+# Множители масштаба по подстроке; длинные раньше коротких.
+_SCALE_TOKENS = (
+    ("млрд", 1e9), ("billion", 1e9), ("bln", 1e9),
+    ("млн", 1e6), ("mln", 1e6), ("mio", 1e6),
+    ("тыс", 1e3), ("thousand", 1e3),
+)
+
+
+def _unit_kind_scale(unit) -> tuple[str, float] | None:
+    """(kind, scale) или None, если единицу понять нельзя → пара пропускается.
+
+    kind: percent | currency | count | multiplier | points | amount | number.
+    Сопоставимы только сущности с одинаковым kind.
+    """
+    u = (str(unit) if unit is not None else "").strip().lower()
+    if not u:
+        return ("number", 1.0)
+
+    if "%" in u or "п.п" in u or u in ("пп", "pp") or "percent" in u or "процент" in u:
+        return ("percent", 1.0)
+
+    # масштаб
+    scale = 1.0
+    for tok, mult in _SCALE_TOKENS:
+        if tok in u:
+            scale = mult
+            break
+    else:
+        if re.search(r"\b(bn|b)\b", u):
+            scale = 1e9
+        elif re.search(r"\b(mn|m)\b", u):
+            scale = 1e6
+        elif re.search(r"\bk\b", u):
+            scale = 1e3
+
+    # валютные формы вида BR / MR / KR / blnR / mRUB / RUB
+    compact = u.replace(" ", "").replace(".", "")
+    m = re.fullmatch(r"(bln|mln|b|m|k)?r(ub)?", compact)
+    if m:
+        scale = {"bln": 1e9, "b": 1e9, "mln": 1e6, "m": 1e6,
+                 "k": 1e3}.get(m.group(1), scale)
+        return ("currency", scale)
+
+    if any(t in u for t in ("руб", "rub", "₽", "usd", "долл", "eur")):
+        return ("currency", scale)
+    if any(t in u for t in ("fte", "чел", "штат", "employee", "headcount")):
+        return ("count", scale)
+    if any(t in u for t in ("раз", "кратн", "times")) or re.search(r"\bx\b", u):
+        return ("multiplier", scale)
+    if any(t in u for t in ("пункт", "point", "score", "балл")):
+        return ("points", scale)
+    if any(t in u for t in ("шт", "штук", "unit", "item")):
+        return ("count", scale)
+
+    # масштаб понятен, размерность — нет: сопоставимо только с таким же amount
+    if scale != 1.0:
+        return ("amount", scale)
+    # единицу не распознали — не флагуем
+    return None
+
+
+def _canonical(value, unit) -> tuple[float, str] | None:
+    """(каноническое_число, kind) или None, если пару нельзя сравнивать."""
+    num = _parse_number(value)
+    if num is None:
+        return None
+    ks = _unit_kind_scale(unit)
+    if ks is None:
+        return None
+    kind, scale = ks
+    return (num * scale, kind)
+
+
+def _values_differ(a: float, b: float) -> bool:
+    """True если значения расходятся больше допуска (не округление)."""
+    if a == b:
+        return False
+    denom = max(abs(a), abs(b))
+    if denom == 0:
+        return False
+    return abs(a - b) / denom > REL_TOLERANCE
+
+
+# ── Парсер периодов ───────────────────────────────────────────────────────────
+
+_QUARTER_RE = re.compile(
+    r"q\s*([1-4])\s*[/\-' ]?\s*(\d{2,4})|(\d{2,4})\s*[/\-' ]?\s*q\s*([1-4])",
+    re.IGNORECASE,
+)
 _MONTH_RU = {
     "январ": 1, "феврал": 2, "март": 3, "апрел": 4, "ма": 5, "июн": 6,
     "июл": 7, "август": 8, "сентябр": 9, "октябр": 10, "ноябр": 11, "декабр": 12,
@@ -48,16 +152,13 @@ _MONTH_RU = {
 
 
 def _parse_period(value: str | None) -> tuple[int | None, int | None, int | None]:
-    """
-    Возвращает (year, quarter, month). Любое поле может быть None.
-    Поддерживает: '2025', '2025-03', '2025-03-15', 'Q1 2025', '2025 Q1',
-    'март 2025', 'март 2025г'.
-    """
+    """(year, quarter, month). Любое поле может быть None.
+    Поддерживает '2025', '2025-03', '2025-03-15', 'Q1 2025', '2025 Q1',
+    'март 2025'."""
     if not value:
         return (None, None, None)
     s = str(value).strip().lower()
 
-    # ISO YYYY-MM-DD / YYYY-MM
     m = re.match(r"^(\d{4})(?:[-/](\d{1,2})(?:[-/](\d{1,2}))?)?$", s)
     if m:
         year = int(m.group(1))
@@ -65,7 +166,6 @@ def _parse_period(value: str | None) -> tuple[int | None, int | None, int | None
         quarter = (month - 1) // 3 + 1 if month else None
         return (year, quarter, month)
 
-    # Q1 2025 / 2025 Q1 / Q1'25
     m = _QUARTER_RE.search(s)
     if m:
         q = int(m.group(1) or m.group(4))
@@ -74,99 +174,54 @@ def _parse_period(value: str | None) -> tuple[int | None, int | None, int | None
             y += 2000
         return (y, q, None)
 
-    # «март 2025», «марта 2025г»
     year_match = re.search(r"(\d{4})", s)
     year = int(year_match.group(1)) if year_match else None
     for prefix, month in _MONTH_RU.items():
         if prefix in s:
-            quarter = (month - 1) // 3 + 1
-            return (year, quarter, month)
+            return (year, (month - 1) // 3 + 1, month)
 
-    # Только год
     if year:
         return (year, None, None)
     return (None, None, None)
 
 
 def _same_period(date_a: str | None, date_b: str | None) -> bool:
-    """
-    True если периоды совместимы (одинаковые) или один из них неизвестен.
-    Раньше сравнивался только год → 'Q1 2025' и 'Q4 2025' считались одним периодом.
-    """
-    if not date_a and not date_b:
-        return True
-    if not date_a or not date_b:
-        return True  # один без даты — не исключаем
+    """True только если периоды точно совместимы.
 
+    Оба неизвестны → True (та же метрика без явного периода).
+    Один известен, другой нет → False (подтвердить нельзя — не флагуем).
+    Оба известны → должны совпасть по самой точной общей гранулярности.
+    """
     ya, qa, ma = _parse_period(date_a)
     yb, qb, mb = _parse_period(date_b)
+    a_known, b_known = ya is not None, yb is not None
 
-    if ya is None or yb is None:
+    if not a_known and not b_known:
         return True
-
+    if a_known != b_known:
+        return False
     if ya != yb:
         return False
-
-    # Если у обоих есть месяц — сравниваем месяцы
     if ma is not None and mb is not None:
         return ma == mb
-    # Если у обоих есть квартал — сравниваем кварталы
     if qa is not None and qb is not None:
         return qa == qb
-    # Один с гранулярностью «год», другой точнее — считаем совместимыми
     return True
 
 
-# ── Fuzzy-матчинг имён метрик ────────────────────────────────────────────────
+# ── Поиск ─────────────────────────────────────────────────────────────────────
 
-def _normalize_for_match(name: str) -> str:
-    """Lowercase, без пунктуации, схлопывает пробелы."""
-    s = re.sub(r"[^\w\s]+", " ", name.lower(), flags=re.UNICODE)
-    return " ".join(s.split())
-
-
-def _similar(a: str, b: str) -> float:
-    return SequenceMatcher(None, _normalize_for_match(a), _normalize_for_match(b)).ratio()
-
-
-async def _find_matching_metrics(
-    db: AsyncSession,
-    normalized_name: str,
-    exclude_document_id: str,
-) -> list[Entity]:
-    """
-    Сначала пробуем точный матч (быстро, индекс).
-    Если ничего — fuzzy-матч среди всех метрик (medlennее, но full scan через ilike).
-    """
-    # Точное совпадение
+async def _same_name_metrics(db: AsyncSession, normalized_name: str) -> list[Entity]:
+    """Все метрики-сущности с ТОЧНО таким нормализованным именем (вкл. свой
+    документ — для внутридокументных расхождений). Никакого fuzzy: обрезки
+    контекста в именах regex-метрик делали fuzzy-матч источником ложных пар."""
     result = await db.execute(
         select(Entity).where(
             Entity.type == "metric",
             Entity.normalized_name == normalized_name,
-            Entity.document_id != exclude_document_id,
         )
     )
-    exact = list(result.scalars().all())
-    if exact:
-        return exact
-
-    # Fuzzy — берём кандидатов по первому слову (грубый префильтр)
-    first_word = normalized_name.split()[0] if normalized_name else ""
-    if not first_word or len(first_word) < 3:
-        return []
-
-    result = await db.execute(
-        select(Entity).where(
-            Entity.type == "metric",
-            Entity.normalized_name.ilike(f"%{first_word}%"),
-            Entity.document_id != exclude_document_id,
-        )
-    )
-    candidates = list(result.scalars().all())
-    matched = [c for c in candidates if _similar(c.normalized_name or "", normalized_name) >= FUZZY_THRESHOLD]
-    if matched and not exact:
-        logger.debug("fuzzy-match: %r → %d кандидатов", normalized_name, len(matched))
-    return matched
+    return list(result.scalars().all())
 
 
 async def check_and_save_contradictions(
@@ -174,43 +229,56 @@ async def check_and_save_contradictions(
     new_document_id: str,
     db: AsyncSession,
 ) -> list[dict]:
-    """
-    Сравниваем новые метрики с существующими в entity_memory.
-    При конфликте по совместимому периоду и существенному отклонению — пишем в contradictions.
-    """
+    """Детерминированно сравнивает метрики документа со всеми метриками корпуса
+    (включая сам документ). Подтверждённые числовые расхождения пишет в
+    contradictions. Возвращает список находок."""
     found: list[dict] = []
+    seen_pairs: set[frozenset] = set()
 
     for metric in new_metrics:
-        normalized = metric.get("normalized_name", "")
+        normalized = (metric.get("normalized_name") or "").strip()
         if not normalized:
             continue
+        canon_a = _canonical(metric.get("value"), metric.get("unit"))
+        if canon_a is None:
+            continue
+        value_a, kind_a = canon_a
+        metric_id = metric.get("id")
 
-        existing = await _find_matching_metrics(db, normalized, new_document_id)
-
-        for existing_entity in existing:
-            if not _values_conflict(metric.get("value"), existing_entity.value):
-                continue
-            if not _same_period(metric.get("date_context"), str(existing_entity.date_context or "")):
-                continue
-            # Разные units (% vs руб, шт vs тыс) — это не противоречие, а разные
-            # метрики с похожим именем. Засчитываем только при совпадающих
-            # либо отсутствующих units.
-            unit_a = (metric.get("unit") or "").strip().lower() or None
-            unit_b = (existing_entity.unit or "").strip().lower() or None
-            if unit_a and unit_b and unit_a != unit_b:
+        for existing in await _same_name_metrics(db, normalized):
+            if existing.id == metric_id:
+                continue  # сама с собой
+            pair = frozenset((metric_id, existing.id))
+            if pair in seen_pairs:
                 continue
 
+            canon_b = _canonical(existing.value, existing.unit)
+            if canon_b is None:
+                continue
+            value_b, kind_b = canon_b
+            if kind_a != kind_b:
+                continue  # разные размерности — это разные метрики
+            if not _same_period(metric.get("date_context"),
+                                str(existing.date_context or "")):
+                continue
+            if not _values_differ(value_a, value_b):
+                continue  # совпадают в пределах допуска — округление, не конфликт
+
+            seen_pairs.add(pair)
             contradiction = {
                 "id": str(uuid.uuid4()),
                 "metric": metric["name"],
-                "value_a": metric.get("value"),
-                "value_b": existing_entity.value,
+                "value_a": str(metric.get("value")),
+                "value_b": str(existing.value),
                 "document_id_a": new_document_id,
-                "document_id_b": existing_entity.document_id,
+                "document_id_b": existing.document_id,
                 "period": metric.get("date_context"),
                 "status": "open",
             }
             await save_contradiction(db, contradiction)
             found.append(contradiction)
 
+    if found:
+        logger.info("find_contradictions doc=%s → %d числовых расхождений",
+                     new_document_id[:8], len(found))
     return found

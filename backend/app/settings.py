@@ -42,14 +42,13 @@ class Settings(BaseSettings):
     # (logic signals — pairwise сравнение пар документов).
     DISABLE_LOGIC_SIGNALS: bool = False
 
-    # Числовой детектор расхождений (extract_entities → find_contradictions
-    # и numeric-часть find_intra_contradictions). Отключён по умолчанию:
-    # на валидации (scripts/eval_detectors.py) дал precision 11% — фабрикует
-    # несуществующие значения, не нормализует единицы/округление, путает
-    # «план vs факт». Числовые расхождения ищет Claude на запросе (целевая
-    # архитектура; гейт Фазы 1 это подтвердил). Логический и promise-детекторы
-    # валидацию прошли (83% / 94%) и работают штатно.
-    ENABLE_NUMERIC_CONTRADICTIONS: bool = False
+    # Числовой детектор расхождений (find_contradictions, вызывается из
+    # extract_entities). Переписан на ДЕТЕРМИНИРОВАННУЮ схему без LLM:
+    # нормализация единиц → сравнение с допуском → строгий матч имени и
+    # периода. Прежняя LLM-зависимая версия фабриковала значения (precision
+    # 11% на валидации); детерминированная фабриковать не может. Включён по
+    # умолчанию; после переиндексации перепроверить scripts/eval_detectors.py.
+    ENABLE_NUMERIC_CONTRADICTIONS: bool = True
 
     # При индексации запускать background-skills (extract_entities →
     # числовые расхождения, track_promises, find_logic_signals) и генерацию

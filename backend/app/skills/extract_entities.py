@@ -309,9 +309,9 @@ async def extract_and_save(
 
     await save_entities(db, rows)
 
-    # Числовой детектор расхождений отключён по умолчанию: на валидации
-    # (scripts/eval_detectors.py) дал precision 11%. Числовые расхождения
-    # ищет Claude на запросе. Флаг ENABLE_NUMERIC_CONTRADICTIONS в settings.py.
+    # Детерминированный числовой детектор (find_contradictions, без LLM):
+    # сравнивает метрики корпуса по нормализованным единицам и периоду.
+    # Управляется флагом ENABLE_NUMERIC_CONTRADICTIONS (settings.py).
     if settings.ENABLE_NUMERIC_CONTRADICTIONS:
         metrics = [r for r in rows if r["type"] == "metric"]
         if metrics:
