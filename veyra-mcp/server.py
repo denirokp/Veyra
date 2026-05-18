@@ -67,7 +67,8 @@ async def search_corpus(query: str, top_k: int = 10) -> dict:
 async def find_numeric_contradictions() -> dict:
     """Предвычисленные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с
     разными значениями (между документами и внутри документа).
-    Готовая таблица, без LLM-вызова.
+    Готовая таблица, без LLM-вызова. Каждая запись несёт severity:
+    critical | medium | low — критичность по величине отрыва значений.
     """
     return {"numeric_contradictions": await _get("/api/contradictions/numeric")}
 
@@ -75,7 +76,8 @@ async def find_numeric_contradictions() -> dict:
 @mcp.tool()
 async def find_logic_contradictions() -> dict:
     """Предвычисленные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
-    смыслу утверждения. Готовая таблица, без LLM-вызова.
+    смыслу утверждения. Готовая таблица, без LLM-вызова. Каждая запись
+    несёт severity: critical | medium | low | unknown.
     """
     return {"logic_contradictions": await _get("/api/contradictions/logic")}
 

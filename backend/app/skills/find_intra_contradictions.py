@@ -45,8 +45,14 @@ SYSTEM_PROMPT = """\
 [{
   "statement_a": "точная цитата места 1",
   "statement_b": "точная цитата места 2",
+  "severity": "critical|medium|low",
   "confidence": 0.0-1.0
 }]
+
+severity — критичность по СТРОГОМУ правилу: "critical" — прямое
+логическое противоречие (взаимоисключающие утверждения); "medium" —
+разные выводы из одних данных без прямого отрицания; "low" — мягкая
+несогласованность формулировок.
 
 Высокий confidence только при очевидном расхождении. Пустой массив [],
 если внутренних логических расхождений нет.\
@@ -83,6 +89,7 @@ async def find_intra_contradictions(
         statement_b = str(f.get("statement_b") or f.get("value_b") or "").strip()
         if not statement_a or not statement_b:
             continue
+        sev = f.get("severity")
         logic_rows.append({
             "id": str(uuid.uuid4()),
             "signal_type": "intra-document",
@@ -90,6 +97,7 @@ async def find_intra_contradictions(
             "statement_b": statement_b,
             "document_id_a": document_id,
             "document_id_b": document_id,
+            "severity": sev if sev in ("critical", "medium", "low") else "unknown",
             "confidence": conf,
             "status": "open",
         })

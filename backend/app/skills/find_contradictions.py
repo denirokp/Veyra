@@ -139,6 +139,21 @@ def _values_differ(a: float, b: float) -> bool:
     return abs(a - b) / denom > REL_TOLERANCE
 
 
+def _severity(a: float, b: float) -> str:
+    """Критичность числового расхождения по СТРОГОМУ правилу — величине
+    отрыва значений (не оценка «на глаз»). Чем сильнее расходятся, тем
+    выше шанс реальной ошибки, которую читатель примет за провал."""
+    denom = max(abs(a), abs(b))
+    if denom == 0:
+        return "low"
+    rel = abs(a - b) / denom
+    if rel >= 0.5:
+        return "critical"
+    if rel >= 0.15:
+        return "medium"
+    return "low"
+
+
 # ── Парсер периодов ───────────────────────────────────────────────────────────
 
 _QUARTER_RE = re.compile(
@@ -273,6 +288,7 @@ async def check_and_save_contradictions(
                 "document_id_a": new_document_id,
                 "document_id_b": existing.document_id,
                 "period": metric.get("date_context"),
+                "severity": _severity(value_a, value_b),
                 "status": "open",
             }
             await save_contradiction(db, contradiction)

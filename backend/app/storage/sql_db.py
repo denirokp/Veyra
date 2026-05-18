@@ -126,6 +126,7 @@ class NumericContradiction(Base):
     document_id_b = Column(String, ForeignKey("documents.id"))
     period = Column(Text)
     status = Column(String, default="open")  # open | resolved | dismissed
+    severity = Column(String, default="unknown")  # critical | medium | low | unknown
     resolved_by = Column(String, ForeignKey("documents.id"), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     resolved_at = Column(DateTime)
@@ -145,6 +146,7 @@ class LogicSignal(Base):
     document_id_a = Column(String, ForeignKey("documents.id"))
     document_id_b = Column(String, ForeignKey("documents.id"))
     status = Column(String, default="open")  # open | reviewed | dismissed
+    severity = Column(String, default="unknown")  # critical | medium | low | unknown
     review_notes = Column(Text)
     confidence = Column(Float)
     created_at = Column(DateTime, server_default=func.now())

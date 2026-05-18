@@ -42,8 +42,16 @@ SYSTEM_PROMPT = """\
   "doc_index_a": 0,
   "doc_index_b": 1,
   "check_question": "Конкретный вопрос к команде",
+  "severity": "critical|medium|low",
   "confidence": 0.0-1.0
 }
+
+severity — критичность по СТРОГОМУ правилу, не оценка «на глаз»:
+- "critical" — прямое логическое противоречие: утверждения
+  взаимоисключающие, одно отрицает другое;
+- "medium" — из одних данных сделаны разные выводы или расставлены
+  разные приоритеты, без прямого отрицания;
+- "low" — мягкая несогласованность формулировок.
 
 Высокий confidence (>0.8) только если конфликт очевиден и не объясняется контекстом.
 Пустой массив если нет сигналов.
@@ -179,6 +187,7 @@ async def find_logic_signals_for_document(
                 "statement_b": s.get("statement_b", ""),
                 "document_id_a": docs[doc_idx_a]["id"],
                 "document_id_b": docs[doc_idx_b]["id"],
+                "severity": s.get("severity") if s.get("severity") in ("critical", "medium", "low") else "unknown",
                 "confidence": s.get("confidence", 0.7),
                 "status": "open",
             })
@@ -235,6 +244,7 @@ async def find_logic_signals_on_demand(
                 "statement_b": s.get("statement_b", ""),
                 "document_id_a": docs[doc_idx_a]["id"],
                 "document_id_b": docs[doc_idx_b]["id"],
+                "severity": s.get("severity") if s.get("severity") in ("critical", "medium", "low") else "unknown",
                 "confidence": s.get("confidence", 0.7),
                 "status": "open",
             })

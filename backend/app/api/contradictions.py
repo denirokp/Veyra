@@ -46,6 +46,7 @@ async def get_numeric_contradictions(
                 "hierarchy_level": doc_b.hierarchy_level if doc_b else None,
             },
             "status": c.status,
+            "severity": c.severity,
             "created_at": c.created_at,
         })
     return result
@@ -130,6 +131,7 @@ async def get_logic_signals(
             },
             "confidence": s.confidence,
             "status": s.status,
+            "severity": s.severity,
             "review_notes": s.review_notes,
             "created_at": s.created_at,
         })
