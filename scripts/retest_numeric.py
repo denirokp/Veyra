@@ -59,8 +59,9 @@ async def main() -> None:
     suppressed_period = 0     # период есть, но не совпал (старый код тоже подавлял)
     per_doc: Counter = Counter()
     severities: Counter = Counter()
+    flagged_pairs: list[dict] = []
 
-    for group in by_name.values():
+    for norm, group in by_name.items():
         for a, b in combinations(group, 2):
             canon_a = _canonical(a.value, a.unit)
             canon_b = _canonical(b.value, b.unit)
@@ -80,6 +81,15 @@ async def main() -> None:
                 per_doc[a.document_id] += 1
                 if b.document_id != a.document_id:
                     per_doc[b.document_id] += 1
+                flagged_pairs.append({
+                    "norm": norm,
+                    "name_a": a.name, "value_a": a.value, "unit_a": a.unit,
+                    "name_b": b.name, "value_b": b.value, "unit_b": b.unit,
+                    "period_a": date_a or "—", "period_b": date_b or "—",
+                    "severity": _severity(val_a, val_b),
+                    "same_doc": a.document_id == b.document_id,
+                    "doc": titles.get(a.document_id, a.document_id)[:48],
+                })
             elif _parse_period(date_a)[0] is None and _parse_period(date_b)[0] is None:
                 suppressed_noperiod += 1
             else:
@@ -101,6 +111,16 @@ async def main() -> None:
     for doc_id, n in per_doc.most_common(15):
         print(f"  {n:4d}  {titles.get(doc_id, doc_id)[:60]}")
     print("=" * 60)
+
+    if "--dump" in sys.argv:
+        print("\nФЛАГОВАННЫЕ ПАРЫ (все):")
+        flagged_pairs.sort(key=lambda p: (p["doc"], p["norm"]))
+        for p in flagged_pairs:
+            scope = "intra" if p["same_doc"] else "cross"
+            print(f"\n  [{p['severity']:8}] [{scope}] {p['doc']}")
+            print(f"    norm='{p['norm']}'")
+            print(f"    A: {p['value_a']} {p['unit_a'] or ''}  «{p['name_a']}»  ({p['period_a']})")
+            print(f"    B: {p['value_b']} {p['unit_b'] or ''}  «{p['name_b']}»  ({p['period_b']})")
 
 
 if __name__ == "__main__":
