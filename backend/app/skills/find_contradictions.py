@@ -203,17 +203,19 @@ def _parse_period(value: str | None) -> tuple[int | None, int | None, int | None
 def _same_period(date_a: str | None, date_b: str | None) -> bool:
     """True только если периоды точно совместимы.
 
-    Оба неизвестны → True (та же метрика без явного периода).
-    Один известен, другой нет → False (подтвердить нельзя — не флагуем).
+    Период подтверждён НЕ у обеих метрик → False. regex-augmented метрики
+    все идут без периода (`date_context=None`); если бы безпериодные пары
+    флагувались, две метрики с совпавшим именем из РАЗНЫХ лет (год не
+    распознан) давали бы ложное расхождение — корпус из 28 документов дал
+    так десятки шумовых пар на документ. Неоднозначность с периодом → пара
+    пропускается (принцип precision-first, см. шапку файла).
     Оба известны → должны совпасть по самой точной общей гранулярности.
     """
     ya, qa, ma = _parse_period(date_a)
     yb, qb, mb = _parse_period(date_b)
     a_known, b_known = ya is not None, yb is not None
 
-    if not a_known and not b_known:
-        return True
-    if a_known != b_known:
+    if not (a_known and b_known):
         return False
     if ya != yb:
         return False
