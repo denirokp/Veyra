@@ -40,7 +40,10 @@ SYSTEM_PROMPT = """\
 """
 
 CHUNK_SIZE = 6000
-MAX_CHUNKS = 8
+# Покрываем документы до ~144K символов (24×6000) — согласовано с
+# MAX_DOC_CHARS find_intra_contradictions. Раньше было 8 (~48K): хвосты
+# длинных стратегических документов терялись молча.
+MAX_CHUNKS = 24
 
 
 def _parse_json_array(raw: str, source_label: str) -> list[dict]:
