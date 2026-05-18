@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veyra — обзор</title>
+<style>
+  :root{
+    --blue:#00AAFF; --purple:#965EEB; --green:#04C168;
+    --amber:#FFA800; --coral:#FF5A5F; --ink:#15161B; --muted:#5C6270; --line:#E4E7EC;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    background:#0c0d12;display:flex;align-items:center;justify-content:center;
+  }
+  .slide{
+    width:100vw;height:100vh;background:#fff;padding:5vh 6vw;
+    display:flex;flex-direction:column;justify-content:center;position:relative;
+  }
+  .kicker{font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--blue);margin-bottom:10px}
+  h1{font-size:60px;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .tagline{font-size:23px;color:var(--ink);margin-top:14px;font-weight:500;max-width:1000px}
+
+  .why{
+    margin-top:24px;background:#F4F6F8;border-radius:16px;padding:20px 26px;
+    font-size:18px;line-height:1.5;color:var(--ink);max-width:1100px;
+  }
+  .why b{color:var(--blue)}
+
+  .h{font-size:15px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);margin:26px 0 14px}
+
+  .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+  .card{border:1px solid var(--line);border-radius:14px;padding:18px 16px;
+    border-top:5px solid var(--blue)}
+  .card:nth-child(2){border-top-color:var(--purple)}
+  .card:nth-child(3){border-top-color:var(--green)}
+  .card:nth-child(4){border-top-color:var(--amber)}
+  .card:nth-child(5){border-top-color:var(--coral)}
+  .card h3{font-size:17px;font-weight:700;line-height:1.2}
+  .card p{font-size:14px;color:var(--muted);line-height:1.4;margin-top:7px}
+
+  .cite{margin-top:12px;font-size:16px;color:var(--ink);font-weight:600}
+  .cite span{color:var(--blue)}
+
+  .how{display:flex;align-items:center;gap:14px;margin-top:8px;flex-wrap:wrap}
+  .how .box{border:1px solid var(--line);border-radius:12px;padding:12px 18px;
+    font-size:15px}
+  .how .box b{display:block;font-size:13px;color:var(--muted);font-weight:700;
+    text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+  .how .arr{color:var(--blue);font-size:22px;font-weight:800}
+
+  .foot{
+    position:absolute;left:6vw;right:6vw;bottom:4vh;
+    border-top:1px solid var(--line);padding-top:14px;
+    font-size:15px;color:var(--muted);display:flex;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+  }
+  .foot b{color:var(--ink)}
+
+  @media print{
+    body{background:#fff}
+    .slide{height:100vh}
+    @page{size:landscape}
+  }
+</style>
+</head>
+<body>
+<section class="slide">
+  <div class="kicker">Что за система</div>
+  <h1>Veyra</h1>
+  <div class="tagline">
+    AI-память коммерческого блока Avito: замечает, <b>где стратегические
+    документы спорят друг с другом</b> — и что мы упускаем.
+  </div>
+
+  <div class="why">
+    Стратегий, планов и разборов — <b>сотни</b>, они в Confluence, и никто
+    не держит весь массив в голове. Один документ говорит «сегмент растёт»,
+    другой через полгода — «падает»; что-то пообещали и забыли; цифра в
+    финмодели не сходится с цифрой в FAQ того же документа. Расхождения
+    копятся и вручную не ловятся — человек не перечитывает 300 документов
+    перед каждым решением.
+  </div>
+
+  <div class="h">Что делает</div>
+  <div class="cards">
+    <div class="card">
+      <h3>Числовые расхождения</h3>
+      <p>Одна метрика — разные значения в разных документах или внутри одного.</p>
+    </div>
+    <div class="card">
+      <h3>Логические противоречия</h3>
+      <p>«Здесь говорим одно, здесь — другое» по одной теме.</p>
+    </div>
+    <div class="card">
+      <h3>Невыполненные обещания</h3>
+      <p>Обещал / сделал — с привязкой к срокам и владельцам.</p>
+    </div>
+    <div class="card">
+      <h3>Пробелы и неувиденное</h3>
+      <p>Что обсуждали, но не закрыли планом; что упускаем — сверкой с рынком.</p>
+    </div>
+    <div class="card">
+      <h3>Сверка инициативы</h3>
+      <p>Новую идею — со всем накопленным: что подтверждается, что спорит.</p>
+    </div>
+  </div>
+  <div class="cite">Каждая находка — <span>с цитатой и ссылкой на документ-источник.</span></div>
+
+  <div class="h">Как устроено</div>
+  <div class="how">
+    <div class="box"><b>Вопрос</b>в чате помощника, на русском</div>
+    <div class="arr">→</div>
+    <div class="box"><b>Claude + Veyra</b>память отдаёт материал, Claude рассуждает</div>
+    <div class="arr">→</div>
+    <div class="box"><b>Ответ</b>с находками и ссылками на источники</div>
+    <div class="arr">·</div>
+    <div class="box" style="border-style:dashed">Не отдельный сайт — навык внутри Claude / Avito AI через MCP</div>
+  </div>
+
+  <div class="foot">
+    <span><b>Статус:</b> прототип. Детекторы логики и обещаний валидированы (83% / 94%).</span>
+    <span>Дальше — полный корпус и интеграция в экосистему Avito (MCP Hub).</span>
+  </div>
+</section>
+</body>
+</html>
