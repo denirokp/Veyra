@@ -110,6 +110,7 @@ Veyra/
     ├── ARCHITECTURE.md     архитектура: слои, модель данных, потоки
     ├── SCALE-PLAN.md       план загрузки корпуса 100→300
     ├── CASES-PLAN.md       вывод бизнес-кейсов на целевой путь
+    ├── USE-CASES.md        каталог кейсов в формате JTBD
     ├── GAP-ANALYSIS-AVITO.md  сравнение с AI-экосистемой Avito
     ├── STATUS.md           снимок статуса сессии
     ├── gate_report.md      результаты гейта детекторов
@@ -166,7 +167,7 @@ LLM_MODEL=moonshot-v1-128k
 | Full-text mode для small corpus (≤20 доков) | ✅ |
 | Brief-based mode для medium corpus | ✅ |
 | Deep research с iterative refinement для 30+ доков | ✅ |
-| Find contradictions (numeric, SQL fuzzy match) | ✅ |
+| Find contradictions (numeric, детерминированный детектор) | ✅ |
 | Find logic signals (pairwise LLM) | ✅ |
 | Initiative review (RAG + contradictions + LLM synthesis) | ✅ |
 | Grounding фактов (regex/fuzzy match) — защита от галлюцинаций | ✅ |

@@ -250,7 +250,7 @@ retrieval сужает 500 документов до ~15 релевантных 
 | `/api/retrieve` (чистый поиск) | ✅ есть | без изменений |
 | veyra-mcp (8 data-инструментов) | ✅ есть, проверен импортом | прогон с живым Claude |
 | veyra-skill (плейбук) | ✅ черновик | доработать под пилот |
-| Индексные детекторы (extract_entities, find_contradictions, find_logic_signals, find_intra_contradictions, track_promises) | ⚠️ **есть, работают, но слабые** | заменить кластер-индексом + агентным Claude |
+| Индексные детекторы (extract_entities, find_contradictions, find_logic_signals, find_intra_contradictions, track_promises) | ⚠️ провалидированы (logic 83% / promises 94%); числовой переписан на детерминированную схему | проверить на масштабе |
 | Структурный индекс (метрика/тема → документы) | ❌ не построен | построить для случая B |
 | Дашборды (Возможность 7) | ❌ не построено | Фаза 2 |
 | Деплой на PaaS + mcp-registry | ❌ | Фаза 2 |
