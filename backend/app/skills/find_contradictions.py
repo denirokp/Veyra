@@ -24,7 +24,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.storage.sql_db import Entity, save_contradiction
+from app.storage.sql_db import Entity, NumericContradiction
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +280,7 @@ async def check_and_save_contradictions(
                 continue  # совпадают в пределах допуска — округление, не конфликт
 
             seen_pairs.add(pair)
-            contradiction = {
+            found.append({
                 "id": str(uuid.uuid4()),
                 "metric": metric["name"],
                 "value_a": str(metric.get("value")),
@@ -290,11 +290,15 @@ async def check_and_save_contradictions(
                 "period": metric.get("date_context"),
                 "severity": _severity(value_a, value_b),
                 "status": "open",
-            }
-            await save_contradiction(db, contradiction)
-            found.append(contradiction)
+            })
 
+    # Сохраняем одним commit в конце. Коммитить в цикле нельзя: commit в
+    # async-сессии обнуляет (expire) ORM-объекты Entity, и следующий доступ
+    # к existing.* падает с MissingGreenlet.
+    for row in found:
+        db.add(NumericContradiction(**row))
     if found:
+        await db.commit()
         logger.info("find_contradictions doc=%s → %d числовых расхождений",
                      new_document_id[:8], len(found))
     return found
