@@ -79,5 +79,6 @@ VEYRA_BACKEND_URL=http://localhost:8000 python server.py
   `docs.k.avito.ru/mcp-hub` (путь mount, требования к health).
 - Авторизация самого veyra-mcp (кто может звать инструменты) — через
   mcp-hub / Keycloak; на этапе alpha доступ только разработчикам.
-- Прогон против живого MCP-клиента — сервер написан, но end-to-end с
-  Claude ещё не проверялся.
+- ✅ Прогон против живого MCP-клиента — проверено end-to-end: Claude Desktop
+  (custom connector, streamable-http через cloudflared-туннель) → veyra-mcp →
+  корпус, на боевом документе. Все 8 инструментов отработали.
