@@ -2,7 +2,7 @@
 
 LEGACY — серверный «мозг». Вызывается только через orchestrator из
 POST /api/chat (React-админ-панель). В целевой архитектуре это
-рассуждение делает Claude по плейбуку ai-lab-skill/skills/SKILL.md, не сервер.
+рассуждение делает Claude по плейбуку ai-lab/skills/SKILL.md, не сервер.
 Не развивать.
 """
 from __future__ import annotations

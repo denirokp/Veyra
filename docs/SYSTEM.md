@@ -196,7 +196,7 @@ AI Lab/
 │   ├── Dockerfile
 │   └── README.md
 │
-├── ai-lab-skill/            ── НАВЫК для Avito skills-hub (Слой 3) ──
+├── ai-lab/            ── НАВЫК для Avito skills-hub (Слой 3) ──
 │   ├── SKILL.md            плейбук: как Claude использует инструменты AI Lab
 │   ├── scripts/report.py   сборка Confluence-отчёта
 │   └── references/README.md инструкция пользователя
@@ -284,7 +284,7 @@ baseline (см. также git-хук `scripts/hooks/pre-push`).
 | docs_agent + orchestrator | синтез ответа с цитатами | ✅ |
 | Гейт (`run_gate.py`) | проверить, что находки реальны и не галлюцинированы | ⚠️ 4/5 на full-text, **один прогон**, малый корпус, precision не измерен |
 | ai-lab-mcp | отдать память как MCP-инструменты | ✅ 8 инструментов, не прогонялся вживую |
-| ai-lab-skill | научить Claude пользоваться AI Lab | ✅ черновик-плейбук |
+| ai-lab | научить Claude пользоваться AI Lab | ✅ черновик-плейбук |
 | ТЗ, ARCHITECTURE, SCALE-PLAN | зафиксировать логику и план | ✅ |
 
 ---

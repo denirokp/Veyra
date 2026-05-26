@@ -100,7 +100,7 @@ AI Lab/
 │   ├── tests/ · requirements.txt · Dockerfile · .env.example
 ├── frontend/               ── React/Vite UI (админ-панель) ──
 ├── ai-lab-mcp/              ── MCP-СЕРВЕР (Слой 2): 8 data-инструментов ──
-├── ai-lab-skill/            ── НАВЫК для Avito skills-hub (Слой 3) ──
+├── ai-lab/            ── НАВЫК для Avito skills-hub (Слой 3) ──
 ├── scripts/                ── index_docs.py, run_gate.py, eval_detectors.py, regression.py, hooks/ ──
 ├── data/                   # data/docs, data/chroma, khronika.db (gitignored)
 ├── docker-compose.yml

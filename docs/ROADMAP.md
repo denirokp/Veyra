@@ -85,7 +85,7 @@ AI Lab — **рабочий прототип**: живой путь (Claude → 
 
 - [ ] ⏸ Независимая разметка ground truth аналитиком — отложено по
       решению; вернуться с корпусом и ресурсом аналитика
-- [ ] Публикация `ai-lab-skill` в [Skills Hub](https://docs.k.avito.ru/mcp-hub/quickstart/)
+- [ ] Публикация `ai-lab` в [Skills Hub](https://docs.k.avito.ru/mcp-hub/quickstart/)
 - [ ] Пилот на 3 пользователях ASD Goods
 
 ---

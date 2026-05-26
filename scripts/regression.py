@@ -44,7 +44,7 @@ BASELINE = OUT_DIR / "baseline.json"
 
 # Поведенческие файлы: их изменение может сдвинуть метрики.
 WATCHED = [
-    "ai-lab-skill/skills/SKILL.md",
+    "ai-lab/skills/SKILL.md",
     "backend/app/skills/extract_entities.py",
     "backend/app/skills/track_promises.py",
     "backend/app/skills/find_logic_signals.py",

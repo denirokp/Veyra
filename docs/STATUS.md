@@ -22,7 +22,7 @@
 | `ai-lab-mcp` — настоящий MCP-сервер | ✅ FastMCP, 8 инструментов проксируют движок, Dockerfile + compose-сервис; alpha (не в production mcp-registry) |
 | Живой путь — проверен end-to-end | ✅ Claude Desktop → `ai-lab-mcp` (custom connector, streamable-http через cloudflared) → корпус. На боевом документе (VOC pre-read) сверка с корпусом поймала то, что standalone-вычитка не видит: числовое расхождение с документом-источником, тройной конфликт определения метрики, фактическую ошибку. Закрывает открытый вопрос `ai-lab-mcp/README`. ⚠️ Корпус — 28-документный тест-прогон, не масштаб |
 | Мультитенантность (workspaces) — PoC подтверждён | ✅ прогнан на Mac: два корпуса (`teamA`/`teamB`) проиндексированы в изолированные Chroma-коллекции, один и тот же запрос `/api/retrieve?workspace=` вернул РАЗНЫЕ непересекающиеся документы (note_a ↔ note_b). Один backend = N изолированных корпусов. Реализация — коллекция-на-workspace + `Document.workspace` + параметр в indexer/retriever/API/MCP (`ARCHITECTURE §3.5`). ⚠️ PoC: workspace — свободный параметр; прод-шаг — вывести из Keycloak-группы (доступ = корпус) |
-| `ai-lab-skill` | ✅ согласован с MCP-сервером (SKILL.md + report.py) |
+| `ai-lab` | ✅ согласован с MCP-сервером (SKILL.md + report.py) |
 | Инкрементальная загрузка `index_docs.py --sync` | ✅ добавление новых + переиндексация изменённых по хэшу |
 | ТЗ v1.4, `gate_report.md` | ✅ зафиксированы честно, с границами |
 | Изоляция серверного «мозга» | ✅ флаг `ENABLE_LEGACY_CHAT` — `POST /api/chat` (orchestrator + docs-agent) помечен LEGACY, нужен только React-панели; живой путь — Claude через ai-lab-mcp |
@@ -100,7 +100,7 @@
   G. дашборды: dwh-redash-mcp + детектор слепых метрик
 
 ФАЗА 3 — запуск
-  • ai-lab-skill → публикация в skills-hub
+  • ai-lab → публикация в skills-hub
   • пилот: 3 человека из ASD Goods, сбор фидбека
 
 ФАЗА 4 — опционально
