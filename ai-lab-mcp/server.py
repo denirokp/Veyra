@@ -54,13 +54,17 @@ async def _get(path: str, params: dict | None = None):
 
 
 @mcp.tool()
-async def search_corpus(query: str, top_k: int = 10) -> dict:
+async def search_corpus(query: str, top_k: int = 10, workspace: str = "default") -> dict:
     """Поиск по корпоративной памяти — возвращает РЕЛЕВАНТНЫЕ ФРАГМЕНТЫ
     документов (сырьё, не готовый ответ). Синтезируй ответ сам из этих
     фрагментов и ссылайся на документы-источники. Используй, чтобы
     собрать материал по теме перед разбором, написанием или сверкой.
+
+    workspace — корпус (команда/человек). Изолирован: поиск идёт только в
+    указанном корпусе. По умолчанию `default`.
     """
-    return {"passages": await _get("/api/retrieve", {"query": query, "top_k": top_k})}
+    return {"passages": await _get(
+        "/api/retrieve", {"query": query, "top_k": top_k, "workspace": workspace})}
 
 
 @mcp.tool()

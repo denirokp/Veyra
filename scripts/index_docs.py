@@ -13,6 +13,21 @@
         • не изменён      → пропускает.
       Для постепенной загрузки корпуса.
 
+Мультитенантность (PoC):
+  --workspace <id>   корпус-владелец (команда/человек). По умолчанию
+                     `default`. Корпуса изолированы: отдельная Chroma-
+                     коллекция + тег в SQLite. Первичный режим сбрасывает
+                     ТОЛЬКО этот workspace, другие не трогает.
+  --docs <dir>       каталог документов (по умолчанию backend/data/docs).
+                     Удобно держать доки разных корпусов в разных папках.
+  --reset-all        полный сброс datastore (файл БД + Chroma) — для
+                     чистого первого старта (например, после смены схемы).
+
+  Пример PoC:
+    python scripts/index_docs.py --reset-all --workspace teamA --docs data/docs_A
+    python scripts/index_docs.py            --workspace teamB --docs data/docs_B
+    # запрос к teamA не видит документов teamB
+
 Скрипт переходит в каталог backend/ — относительные пути (БД, Chroma,
 docs) резолвятся так же, как при запуске сервера.
 """
@@ -68,13 +83,14 @@ def _reset_datastore() -> None:
         print(f"  сброшено: {chroma_dir}/")
 
 
-async def _index_one(db: AsyncSession, f: Path) -> int:
+async def _index_one(db: AsyncSession, f: Path, workspace: str = "default") -> int:
     """Индексирует один файл как новый документ. Возвращает число чанков."""
     doc_id = str(uuid.uuid4())
     doc = await create_document(
         db,
         {
             "id": doc_id,
+            "workspace": workspace,
             "title": f.stem,
             "type": None,
             "status": "actual",
@@ -90,33 +106,59 @@ async def _index_one(db: AsyncSession, f: Path) -> int:
         "status": "actual",
         "hierarchy_level": doc.hierarchy_level,
     }
-    n = await index_document(f, doc_id, metadata, db)
+    n = await index_document(f, doc_id, metadata, db, workspace=workspace)
     doc.chunk_count = n
     await db.commit()
     return n
 
 
+def _arg(name: str, default: str) -> str:
+    """Достаёт значение флага вида `--name value` из argv."""
+    argv = sys.argv[1:]
+    if name in argv:
+        i = argv.index(name)
+        if i + 1 < len(argv):
+            return argv[i + 1]
+    return default
+
+
 async def main():
     sync = "--sync" in sys.argv[1:]
+    reset_all = "--reset-all" in sys.argv[1:]
+    workspace = _arg("--workspace", "default")
+    docs_dir = Path(_arg("--docs", str(DOCS_DIR)))
 
-    if not sync:
-        print("Сброс datastore перед первичной индексацией:")
+    if reset_all:
+        print("Полный сброс datastore (--reset-all):")
         _reset_datastore()
     await init_db()
 
-    print(f"Каталог документов: {DOCS_DIR.resolve()}")
-    files = [f for f in DOCS_DIR.rglob("*") if f.suffix.lower() in SUPPORTED]
-    mode = "инкремент (--sync)" if sync else "первичный (сброс базы)"
+    print(f"Workspace: {workspace}")
+    print(f"Каталог документов: {docs_dir.resolve()}")
+    files = [f for f in docs_dir.rglob("*") if f.suffix.lower() in SUPPORTED]
+    if sync:
+        mode = "инкремент (--sync)"
+    elif reset_all:
+        mode = "первичный (полный сброс)"
+    else:
+        mode = f"первичный (сброс workspace '{workspace}')"
     print(f"Найдено {len(files)} файлов · режим: {mode}\n")
 
     new_n = changed_n = skipped_n = error_n = 0
 
     async with AsyncSession(engine) as db:
-        # В sync-режиме — карты уже загруженных документов по хэшу и пути.
+        # Пер-workspace сброс: чистим только этот корпус, другие не трогаем.
+        if not sync and not reset_all:
+            vector_db.drop_workspace(workspace)
+            for d in await list_documents(db, workspace=workspace):
+                await cascade_delete_document(db, d.id)
+
+        # В sync-режиме — карты уже загруженных документов по хэшу и пути
+        # (только в пределах этого workspace).
         by_hash: dict[str, object] = {}
         by_path: dict[str, object] = {}
         if sync:
-            for d in await list_documents(db):
+            for d in await list_documents(db, workspace=workspace):
                 if d.file_hash:
                     by_hash[d.file_hash] = d
                 if d.file_path:
@@ -133,8 +175,8 @@ async def main():
                     old = by_path.get(str(f))
                     if old is not None:
                         print(f"  ~ переиндексация (изменён): {f.name}")
-                        vector_db.delete_document_chunks(old.id, "actual")
-                        vector_db.delete_document_chunks(old.id, "archive")
+                        vector_db.delete_document_chunks(old.id, "actual", workspace)
+                        vector_db.delete_document_chunks(old.id, "archive", workspace)
                         await cascade_delete_document(db, old.id)
                         changed_n += 1
                     else:
@@ -142,7 +184,7 @@ async def main():
                         new_n += 1
                 else:
                     print(f"  Индексирую: {f.name} ...", flush=True)
-                n = await _index_one(db, f)
+                n = await _index_one(db, f, workspace)
                 print(f"  → {n} чанков\n")
             except Exception as e:  # noqa: BLE001
                 print(f"  ОШИБКА ({f.name}): {e}\n")

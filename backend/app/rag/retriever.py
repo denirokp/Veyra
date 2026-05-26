@@ -156,6 +156,7 @@ async def retrieve(
     top_k: int = 10,
     include_archive: bool = False,
     segment_filter: str | None = None,
+    workspace: str = "default",
 ) -> list[RetrievedChunk]:
     """
     Основной hybrid retrieval:
@@ -178,6 +179,7 @@ async def retrieve(
         collection_name="actual",
         n_results=max(60, top_k * 2),
         where=where_filter or None,
+        workspace=workspace,
     )
     vec_chunks = [
         RetrievedChunk(id=r["id"], content=(r.get("content") or ""), metadata=r.get("metadata") or {})
@@ -190,6 +192,7 @@ async def retrieve(
             collection_name="archive",
             n_results=10,
             where=where_filter or None,
+            workspace=workspace,
         )
         arc_chunks = [
             RetrievedChunk(id=r["id"], content=(r.get("content") or ""), metadata=r.get("metadata") or {})
@@ -223,7 +226,8 @@ async def retrieve(
 async def retrieve_for_writing(
     topic: str,
     top_k: int = 8,
+    workspace: str = "default",
 ) -> list[RetrievedChunk]:
     """Для написания документов — только actual, без архива."""
-    chunks = await retrieve(topic, top_k=top_k, include_archive=False)
+    chunks = await retrieve(topic, top_k=top_k, include_archive=False, workspace=workspace)
     return [c for c in chunks if c.status == "actual"]

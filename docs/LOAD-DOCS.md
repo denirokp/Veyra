@@ -1,7 +1,27 @@
 # Загрузка новых документов в корпус
 
-Как добавить документы, чтобы AI Lab/AI Lab их видела. Делается на машине,
+Как добавить документы, чтобы AI Lab их видела. Делается на машине,
 где запущен backend (локально или на PaaS-хосте).
+
+## Мультитенантность (PoC) — изолированные корпуса
+
+Каждый документ принадлежит `workspace` (команда/человек). Корпуса
+изолированы: запрос к одному не видит документов другого. На PoC workspace
+— флаг; в проде выводится из Keycloak-группы (см. `ARCHITECTURE.md §3.5`).
+
+```bash
+# два разных корпуса из разных папок
+python scripts/index_docs.py --reset-all --workspace teamA --docs data/docs_A
+python scripts/index_docs.py            --workspace teamB --docs data/docs_B
+```
+Проверка изоляции (backend должен быть запущен):
+```bash
+curl "http://localhost:8000/api/retrieve?query=...&workspace=teamA"   # только доки A
+curl "http://localhost:8000/api/retrieve?query=...&workspace=teamB"   # только доки B
+```
+В MCP: `search_corpus(query, workspace="teamA")`. Без `--workspace` всё
+идёт в `default` (старое поведение). `--reset-all` нужен один раз после
+обновления схемы (добавилась колонка `workspace`).
 
 ## Шаги
 

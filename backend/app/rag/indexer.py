@@ -107,6 +107,7 @@ async def index_document(
     document_id: str,
     document_metadata: dict,
     db: AsyncSession,
+    workspace: str = "default",
 ) -> int:
     """
     Полный пайплайн индексации:
@@ -171,6 +172,7 @@ async def index_document(
                 for i, c in enumerate(chunks)
             ],
             collection_name=collection_name,
+            workspace=workspace,
         )
 
     # Сохраняем чанки в SQLite

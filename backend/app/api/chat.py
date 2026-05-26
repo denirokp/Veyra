@@ -49,6 +49,7 @@ async def retrieve_passages(
     query: str,
     top_k: int = 10,
     include_archive: bool = False,
+    workspace: str = "default",
 ):
     """Чистый retrieval — релевантные фрагменты корпуса БЕЗ LLM-синтеза.
 
@@ -59,7 +60,8 @@ async def retrieve_passages(
     """
     from app.rag.retriever import retrieve
 
-    chunks = await retrieve(query, top_k=top_k, include_archive=include_archive)
+    chunks = await retrieve(query, top_k=top_k, include_archive=include_archive,
+                            workspace=workspace)
     return [
         {
             "id": c.id,

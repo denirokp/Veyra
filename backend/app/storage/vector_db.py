@@ -24,13 +24,15 @@ def get_client() -> chromadb.ClientAPI:
     return _client
 
 
-def get_collection(name: str = "actual") -> Collection:
+def get_collection(name: str = "actual", workspace: str = "default") -> Collection:
     """
-    Коллекции: 'actual', 'archive'.
-    superseded не индексируется.
+    Коллекции: 'actual', 'archive'. superseded не индексируется.
+    Мультитенантность (PoC): имя коллекции включает workspace —
+    `khronika_<workspace>_<name>`. Разные workspace = изолированные корпуса
+    в одном Chroma. Дефолт `default` — обратная совместимость поведения.
     """
     return get_client().get_or_create_collection(
-        name=f"khronika_{name}",
+        name=f"khronika_{workspace}_{name}",
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -38,8 +40,9 @@ def get_collection(name: str = "actual") -> Collection:
 def upsert_chunks(
     chunks: list[dict[str, Any]],
     collection_name: str = "actual",
+    workspace: str = "default",
 ) -> None:
-    col = get_collection(collection_name)
+    col = get_collection(collection_name, workspace)
     # Chroma не принимает None в metadata — выкидываем
     metadatas = [
         {k: v for k, v in c["metadata"].items() if v is not None}
@@ -58,8 +61,9 @@ def query_chunks(
     collection_name: str = "actual",
     n_results: int = 20,
     where: dict | None = None,
+    workspace: str = "default",
 ) -> list[dict[str, Any]]:
-    col = get_collection(collection_name)
+    col = get_collection(collection_name, workspace)
     result = col.query(
         query_embeddings=[embedding],
         n_results=n_results,
@@ -77,17 +81,30 @@ def query_chunks(
     return items
 
 
-def delete_document_chunks(document_id: str, collection_name: str = "actual") -> None:
-    col = get_collection(collection_name)
+def delete_document_chunks(
+    document_id: str, collection_name: str = "actual", workspace: str = "default"
+) -> None:
+    col = get_collection(collection_name, workspace)
     col.delete(where={"document_id": document_id})
 
 
+def drop_workspace(workspace: str) -> None:
+    """Удаляет обе коллекции workspace — для чистого реиндекса именно его,
+    не трогая другие корпуса."""
+    client = get_client()
+    for name in ("actual", "archive"):
+        try:
+            client.delete_collection(name=f"khronika_{workspace}_{name}")
+        except Exception:
+            pass  # коллекции может не быть — это нормально
+
+
 def get_document_chunks(
-    document_id: str, collection_name: str = "actual"
+    document_id: str, collection_name: str = "actual", workspace: str = "default"
 ) -> list[dict[str, Any]]:
     """Вернёт все чанки документа с embeddings — для миграции между коллекциями
     без пересчёта эмбеддингов."""
-    col = get_collection(collection_name)
+    col = get_collection(collection_name, workspace)
     result = col.get(
         where={"document_id": document_id},
         include=["documents", "metadatas", "embeddings"],

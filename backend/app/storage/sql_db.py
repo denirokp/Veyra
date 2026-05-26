@@ -55,6 +55,9 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(String, primary_key=True)
+    # Мультитенантность (PoC): корпус-владелец документа. Изолирует корпуса
+    # разных команд/людей в одной базе. В проде = Keycloak-группа.
+    workspace = Column(String, default="default", index=True)
     title = Column(Text, nullable=False)
     type = Column(String)
     segment = Column(String)
@@ -418,6 +421,7 @@ async def list_documents(
     session: AsyncSession,
     status: str | None = None,
     segment: str | None = None,
+    workspace: str | None = None,
 ) -> list[Document]:
     from sqlalchemy import select
     q = select(Document).where(Document.status != "superseded")
@@ -425,6 +429,8 @@ async def list_documents(
         q = q.where(Document.status == status)
     if segment:
         q = q.where(Document.segment == segment)
+    if workspace:
+        q = q.where(Document.workspace == workspace)
     q = q.order_by(Document.hierarchy_level, Document.created_at.desc())
     result = await session.execute(q)
     return list(result.scalars().all())
