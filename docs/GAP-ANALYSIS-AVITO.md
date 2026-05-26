@@ -213,7 +213,7 @@ AI Lab **уже совпадает** с паттерном, от **реальн�
 - `docs/USE-CASES.md` — каталог кейсов в формате JTBD (предусловие G5).
 
 **Осталось сделать в репозитории (без доступов Avito):**
-- G5-предусловие — сверка frontmatter `ai-lab-skill/SKILL.md` (формально
+- G5-предусловие — сверка frontmatter `ai-lab-skill/skills/SKILL.md` (формально
   `name` + `description` уже есть);
 - G6 — логирование числа tool-call / латентности в `ai-lab-mcp`;
 - G7 — `docs/ROADMAP.md`;

@@ -2,7 +2,7 @@
 
 LEGACY — серверный «мозг». Вызывается только из POST /api/chat (React-
 админ-панель). Продуктовый живой путь — Claude через ai-lab-mcp, где
-рассуждение делает Claude по плейбуку ai-lab-skill/SKILL.md, а не этот
+рассуждение делает Claude по плейбуку ai-lab-skill/skills/SKILL.md, а не этот
 код. Не развивать: при ENABLE_LEGACY_CHAT=0 путь /api/chat отключается.
 """
 from __future__ import annotations

@@ -276,7 +276,7 @@ AI Lab:        список расхождений с цитатами и ссы
 5. Аппрув mcp-registry → мердж → сервис в production-hub.
 
 **Трек F — Драфт SKILL.md.** Может идти параллельно. Образец — `quality-metrics`, изучить его `SKILL.md` первым делом.
-Структура: `ai-lab-skill/SKILL.md` + `scripts/check_init.py` + `scripts/report.py` + `references/README.md`.
+Структура: `ai-lab-skill/skills/SKILL.md` + `scripts/check_init.py` + `scripts/report.py` + `references/README.md`.
 `SKILL.md` description (триггеры):
 ```yaml
 ---

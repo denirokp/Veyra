@@ -108,7 +108,7 @@ AI Lab — корпоративная память коммерческого б
   Слой данных движка: `GET /api/retrieve` (чистый поиск) и data-эндпоинты
   (`/api/documents`, `/api/contradictions/*`, `/api/promises`,
   `/api/docs/stats`). Ноль LLM на сервере. Рассуждение — у Claude по
-  плейбуку `ai-lab-skill/SKILL.md`.
+  плейбуку `ai-lab-skill/skills/SKILL.md`.
 - **Legacy путь** — `POST /api/chat` → `orchestrator` → `docs-agent`.
   Серверный «мозг»: синтез ответа делается на сервере (LLM на живом
   пути). Используется **только React-админ-панелью**, продуктовым путём

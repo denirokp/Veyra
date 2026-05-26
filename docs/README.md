@@ -39,4 +39,4 @@
 
 - Корневой [`../README.md`](../README.md) — быстрый старт, стек, запуск.
 - [`../ai-lab-mcp/README.md`](../ai-lab-mcp/README.md) — MCP-сервер (Слой 2).
-- [`../ai-lab-skill/SKILL.md`](../ai-lab-skill/SKILL.md) — плейбук навыка (Слой 3).
+- [`../ai-lab-skill/skills/SKILL.md`](../ai-lab-skill/skills/SKILL.md) — плейбук навыка (Слой 3).
