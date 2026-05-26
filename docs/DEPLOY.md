@@ -86,6 +86,9 @@ huggingface. Варианты: разрешить egress на huggingface на �
 - [ ] внешний роут на ai-lab-mcp `/mcp`; backend — внутренний
 - [ ] embedding-модель: egress или бандл + offline-флаги
 - [ ] контроль доступа: за mcp-hub + Keycloak-группа (или bearer-токен на пилот)
+- [ ] **мультитенантность (workspaces)** — заложить ДО деплоя: тег
+      `workspace` в данных + коллекция-на-workspace + скоуп в ai-lab-mcp по
+      Keycloak-группе. Дизайн — `ARCHITECTURE.md §3.5`. Ретрофит дороже.
 
 ## Дальше — mcp-registry
 
