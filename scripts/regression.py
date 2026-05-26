@@ -23,7 +23,7 @@
 
 Покрытие: recall (`run_gate.py`, путь /api/chat) и precision детекторов
 (`eval_detectors.py`, выборка). Регрессия живого пути SKILL.md (Claude +
-veyra-mcp) требует Claude-управляемого харнеса и здесь НЕ автоматизирована
+ai-lab-mcp) требует Claude-управляемого харнеса и здесь НЕ автоматизирована
 — известный предел, см. docs/GAP-ANALYSIS-AVITO.md §3 G4.
 
 Только stdlib.
@@ -44,7 +44,7 @@ BASELINE = OUT_DIR / "baseline.json"
 
 # Поведенческие файлы: их изменение может сдвинуть метрики.
 WATCHED = [
-    "veyra-skill/SKILL.md",
+    "ai-lab-skill/SKILL.md",
     "backend/app/skills/extract_entities.py",
     "backend/app/skills/track_promises.py",
     "backend/app/skills/find_logic_signals.py",

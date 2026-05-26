@@ -1,4 +1,4 @@
-# Veyra/Хроника — корпоративная память Avito.
+# AI Lab/Хроника — корпоративная память Avito.
 # Поднимает backend (FastAPI + Chroma + SQLite) и frontend (Vite build на nginx).
 #
 # Запуск:
@@ -15,7 +15,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: veyra-backend
+    container_name: ai-lab-backend
     restart: unless-stopped
     env_file:
       - .env
@@ -28,8 +28,8 @@ services:
       # В контейнере фронта nginx стоит на 80 → доступ через localhost:8080.
       CORS_ORIGINS: http://localhost:8080,http://localhost:5173
     volumes:
-      - veyra-data:/app/data
-      - veyra-hf-cache:/app/.hf_cache
+      - ai-lab-data:/app/data
+      - ai-lab-hf-cache:/app/.hf_cache
     expose:
       - "8000"
     healthcheck:
@@ -43,7 +43,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: veyra-frontend
+    container_name: ai-lab-frontend
     restart: unless-stopped
     ports:
       - "8080:80"
@@ -55,19 +55,19 @@ services:
       interval: 30s
       timeout: 3s
 
-  # MCP-сервер Veyra — тонкий фасад над backend, отдаёт корпоративную
+  # MCP-сервер AI Lab — тонкий фасад над backend, отдаёт корпоративную
   # память как MCP-инструменты. В сети compose backend доступен как
   # http://backend:8000.
-  veyra-mcp:
+  ai-lab-mcp:
     build:
-      context: ./veyra-mcp
+      context: ./ai-lab-mcp
       dockerfile: Dockerfile
-    container_name: veyra-mcp
+    container_name: ai-lab-mcp
     restart: unless-stopped
     environment:
-      VEYRA_BACKEND_URL: http://backend:8000
-      VEYRA_MCP_HOST: 0.0.0.0
-      VEYRA_MCP_PORT: "8765"
+      AILAB_BACKEND_URL: http://backend:8000
+      AILAB_MCP_HOST: 0.0.0.0
+      AILAB_MCP_PORT: "8765"
     ports:
       - "8765:8765"
     depends_on:
@@ -76,6 +76,6 @@ services:
 
 volumes:
   # БД, Chroma, файлы документов
-  veyra-data:
+  ai-lab-data:
   # Кэш HuggingFace моделей — чтобы не качать sentence-transformers каждый раз
-  veyra-hf-cache:
+  ai-lab-hf-cache:

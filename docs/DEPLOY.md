@@ -1,7 +1,7 @@
 # Deploy — бриф для разработчика
 
 Что нужно вывести с личного компа на Avito PaaS, чтобы коллеги могли
-тестить veyra-mcp не через туннель. Это описание топологии и требований —
+тестить ai-lab-mcp не через туннель. Это описание топологии и требований —
 PaaS-манифесты (atlas / helmgen) разработчик пишет под нашу платформу сам.
 
 ## Что деплоим — 2 сервиса
@@ -9,18 +9,18 @@ PaaS-манифесты (atlas / helmgen) разработчик пишет по
 | Сервис | Порт | Dockerfile | Роль |
 |---|---|---|---|
 | **backend** | 8000 | `backend/Dockerfile` | движок: RAG + детекторы + корпус. Внутренний. |
-| **veyra-mcp** | 8765 | `veyra-mcp/Dockerfile` | тонкий MCP-фасад над backend. **Внешний** (его зовёт Claude коллег). |
+| **ai-lab-mcp** | 8765 | `ai-lab-mcp/Dockerfile` | тонкий MCP-фасад над backend. **Внешний** (его зовёт Claude коллег). |
 
 `frontend/` (React-панель) — для теста коллегами **не нужен**, можно не деплоить.
 
-`veyra-mcp` — это streamable-http MCP, путь `/mcp`. Коллеги подключают
+`ai-lab-mcp` — это streamable-http MCP, путь `/mcp`. Коллеги подключают
 `https://<внешний-адрес>/mcp` в `avito ai claude` / claude.ai как custom MCP.
 
 ## Сеть
 
-- **veyra-mcp** — внешний роут (внутри `*.k.avito.ru`), доступен коллегам.
-- **backend** — только внутренний; `veyra-mcp` ходит в него по
-  `VEYRA_BACKEND_URL=http://backend:8000`.
+- **ai-lab-mcp** — внешний роут (внутри `*.k.avito.ru`), доступен коллегам.
+- **backend** — только внутренний; `ai-lab-mcp` ходит в него по
+  `AILAB_BACKEND_URL=http://backend:8000`.
 
 ## Env
 
@@ -33,10 +33,10 @@ PaaS-манифесты (atlas / helmgen) разработчик пишет по
 - `ENABLE_LEGACY_CHAT=0` — без React-панели нужен только слой данных.
 - `CORS_ORIGINS` — не критично без фронта.
 
-**veyra-mcp**:
-- `VEYRA_BACKEND_URL=http://backend:8000`
-- `VEYRA_BACKEND_TOKEN=<тот же API_AUTH_TOKEN>` — иначе backend ответит 401.
-- `VEYRA_MCP_HOST=0.0.0.0`, `VEYRA_MCP_PORT=8765`
+**ai-lab-mcp**:
+- `AILAB_BACKEND_URL=http://backend:8000`
+- `AILAB_BACKEND_TOKEN=<тот же API_AUTH_TOKEN>` — иначе backend ответит 401.
+- `AILAB_MCP_HOST=0.0.0.0`, `AILAB_MCP_PORT=8765`
 
 Токены — через секреты PaaS, не в манифест.
 
@@ -63,14 +63,14 @@ huggingface. Варианты: разрешить egress на huggingface на �
 
 ## Чек-лист для PaaS
 
-- [ ] 2 сервиса (backend, veyra-mcp) из их Dockerfile
+- [ ] 2 сервиса (backend, ai-lab-mcp) из их Dockerfile
 - [ ] backend: персистентный том `/app/data` + засев/реиндекс корпуса
 - [ ] секреты: `LLM_API_KEY`, `API_AUTH_TOKEN`
 - [ ] `LLM_BASE_URL` → Avito AI proxy
-- [ ] внешний роут на veyra-mcp `/mcp`; backend — внутренний
+- [ ] внешний роут на ai-lab-mcp `/mcp`; backend — внутренний
 - [ ] embedding-модель: egress или бандл + offline-флаги
 
 ## Дальше — mcp-registry
 
-Когда сервис живёт на PaaS — PR в `mcp-registry`, чтобы veyra появился у
+Когда сервис живёт на PaaS — PR в `mcp-registry`, чтобы ai-lab появился у
 коллег в `avito ai claude` без ручного добавления URL (с OAuth).

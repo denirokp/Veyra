@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Veyra — статус-отчёт</title>
+<title>AI Lab — статус-отчёт</title>
 <style>
   :root{
     --blue:#00AAFF; --blue-d:#0077B6; --purple:#965EEB;
@@ -162,10 +162,10 @@
   <!-- 1. Cover -->
   <section class="slide cover active">
     <div class="kicker">Статус-отчёт · май 2026</div>
-    <h1>Veyra</h1>
+    <h1>AI Lab — 6 Pagers</h1>
     <div class="sub">Claude, который сверяет корпус документов компании<br>на противоречия, обещания и серые зоны</div>
     <div class="who">Докладчик: ___________ &nbsp;·&nbsp; для: Алексей</div>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="hint">→ / пробел — следующий слайд &nbsp;·&nbsp; F11 — фуллскрин &nbsp;·&nbsp; печать — PDF</div>
   </section>
 
@@ -188,7 +188,7 @@
         <p style="margin-top:14px">Эксперт переключается с рутинной вычитки на разбор готовых находок.</p>
       </div>
     </div>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">2 / 10</div>
   </section>
 
@@ -201,8 +201,8 @@
         <ul class="clean">
           <li><b>Слой данных:</b> индексация корпуса, гибридный поиск (эмбеддинги + BM25 + RRF), 9 таблиц БД.</li>
           <li><b>Детекторы («бульон»):</b> числовые расхождения, обещания, логические сигналы — работают на индексации.</li>
-          <li><b>veyra-mcp:</b> 8 инструментов-данных, ноль LLM — чистый фасад к корпусу.</li>
-          <li><b>veyra-skill / SKILL.md:</b> плейбук рассуждения Claude — цитаты, разметка ФАКТ/ГИПОТЕЗА, контракт охвата.</li>
+          <li><b>ai-lab-mcp:</b> 8 инструментов-данных, ноль LLM — чистый фасад к корпусу.</li>
+          <li><b>ai-lab-skill / SKILL.md:</b> плейбук рассуждения Claude — цитаты, разметка ФАКТ/ГИПОТЕЗА, контракт охвата.</li>
           <li class="p"><b>Изоляция серверного «мозга»:</b> живой путь = Claude через MCP; legacy-путь выключается флагом.</li>
           <li class="p"><b>Gap-анализ</b> против AI-экосистемы Avito (MCP Hub, Skills Hub).</li>
           <li class="p"><b>Eval-харнес (G1) прогнан:</b> precision — обещания 94%, логика 83%, числовые 11%.</li>
@@ -220,7 +220,7 @@
         <p class="muted" style="font-size:15px;margin-top:14px">Цель Фазы 1 — recall ≥ 80% на полнотекстовом анализе.</p>
       </div>
     </div>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">3 / 10</div>
   </section>
 
@@ -239,7 +239,7 @@
       <div class="layer l2">
         <div class="tag">Слой 2</div>
         <div class="body">
-          <h3>veyra-mcp</h3>
+          <h3>ai-lab-mcp</h3>
           <p>8 инструментов-данных: search_corpus, find_* (расхождения/обещания), list/get_document, corpus_stats.</p>
         </div>
       </div>
@@ -252,7 +252,7 @@
       </div>
     </div>
     <p class="muted" style="margin-top:24px;font-size:18px">Принцип: данные — на сервере, рассуждение — у модели. Тот же паттерн, что у AI-проектов Avito.</p>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">4 / 10</div>
   </section>
 
@@ -271,8 +271,8 @@
       <div class="arr">→</div>
       <div class="step"><div class="n">5</div><h3>Цитаты</h3><p>каждое утверждение → ссылка на документ</p></div>
     </div>
-    <p class="muted" style="margin-top:26px;font-size:18px">Целевой путь: Claude → MCP Hub → veyra-mcp → слой данных. Корпус не покидает периметр без надобности.</p>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <p class="muted" style="margin-top:26px;font-size:18px">Целевой путь: Claude → MCP Hub → ai-lab-mcp → слой данных. Корпус не покидает периметр без надобности.</p>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">5 / 10</div>
   </section>
 
@@ -286,7 +286,7 @@
           <li class="g"><b>Фаза 1</b> — полнотекстовый retrieval-гейт: <b>закрыта в объёме</b>, 4 / 5 кейсов (5-й — rate-limit, не провал логики).</li>
           <li class="a"><b>Фаза 1.5</b> — retrieval-гейт: <b>почти закрыта</b>.</li>
           <li class="a"><b>Детекторы провалидированы</b> — обещания 94%, логика 83%. Числовой детектор как предвычислитель закрыт: прогон 28 документов вскрыл 162 шумовые пары, два фикса свели к 19 — числовые расхождения ищет Claude.</li>
-          <li class="p"><b>Архитектура</b> согласована с паттерном Avito; veyra-skill уже в формате Skills Hub.</li>
+          <li class="p"><b>Архитектура</b> согласована с паттерном Avito; ai-lab-skill уже в формате Skills Hub.</li>
         </ul>
       </div>
       <div>
@@ -295,7 +295,7 @@
         </div>
       </div>
     </div>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">6 / 10</div>
   </section>
 
@@ -320,7 +320,7 @@
       </div>
     </div>
     <div class="principle">«Детекторы должны работать до упаковки в скилл. Если врут — никакая красивость не спасёт.»</div>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">7 / 10</div>
   </section>
 
@@ -340,8 +340,8 @@
       <div class="card purple">
         <div class="lbl" style="font-size:18px">Фаза 3 — Интеграция в Avito</div>
         <div class="desc" style="font-size:15px;margin-top:12px">
-          • регистрация veyra-mcp за MCP Hub — единый OAuth/Keycloak, PII-анонимизация.<br><br>
-          • публикация veyra-skill в Skills Hub.
+          • регистрация ai-lab-mcp за MCP Hub — единый OAuth/Keycloak, PII-анонимизация.<br><br>
+          • публикация ai-lab-skill в Skills Hub.
         </div>
       </div>
       <div class="card">
@@ -353,7 +353,7 @@
       </div>
     </div>
     <p class="muted" style="margin-top:24px;font-size:17px">Очередь зафиксирована gap-анализом против Avito: Фаза 2 — ворота, без неё Фаза 3 преждевременна.</p>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">8 / 10</div>
   </section>
 
@@ -371,11 +371,11 @@
       </div>
       <div class="panel">
         <div class="ph">Принцип переиспользования</div>
-        <p>veyra-skill — устанавливаемый скилл формата Skills Hub.</p>
-        <p style="margin-top:12px">Данные — за MCP, рассуждение — у Claude. Дашборды и метрики подключаются отдельными MCP (dwh-redash, grafana) и не дублируются в Veyra.</p>
+        <p>ai-lab-skill — устанавливаемый скилл формата Skills Hub.</p>
+        <p style="margin-top:12px">Данные — за MCP, рассуждение — у Claude. Дашборды и метрики подключаются отдельными MCP (dwh-redash, grafana) и не дублируются в AI Lab.</p>
       </div>
     </div>
-    <div class="brandmark"><span class="dot"></span> Veyra</div>
+    <div class="brandmark"><span class="dot"></span> AI Lab</div>
     <div class="counter">9 / 10</div>
   </section>
 

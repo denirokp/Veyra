@@ -1,4 +1,4 @@
-# Veyra
+# AI Lab — 6 Pagers
 
 ИИ-система корпоративной памяти для коммерческого блока Avito: замечает,
 **где стратегические документы спорят друг с другом** (числовые
@@ -10,7 +10,7 @@
 
 > «Хроника» — внутренний кодовик проекта; отсюда имена в коде
 > (`khronika.db`, коллекции `khronika_*`, `app.title = "Хроника API"`).
-> Внешнее имя продукта — **Veyra**.
+> Внешнее имя продукта — **AI Lab — 6 Pagers** (коротко — AI Lab).
 
 ---
 
@@ -35,7 +35,7 @@
 
 Каждая находка — **с цитатой и ссылкой на источник**.
 
-**Чего Veyra НЕ делает:** не пишет документы вместо человека и не
+**Чего AI Lab НЕ делает:** не пишет документы вместо человека и не
 заменяет обычный поиск по Confluence. Её ниша — **логика: где документы
 спорят и чего в них не хватает**. Кросс-опыление с рынком и метрики
 дашбордов — **рабочий механизм** поиска «неувиденного» (ТЗ, Возможности
@@ -53,7 +53,7 @@
 └───────────────────────────┬──────────────────────────────────┘
                             │ MCP (streamable-http)
 ┌───────────────────────────▼──────────────────────────────────┐
-│  СЛОЙ 2 — veyra-mcp  (фасад данных, НОЛЬ LLM)                 │
+│  СЛОЙ 2 — ai-lab-mcp  (фасад данных, НОЛЬ LLM)                 │
 │  8 инструментов: поиск, документы, расхождения, обещания      │
 └───────────────────────────┬──────────────────────────────────┘
                             │ HTTP
@@ -79,14 +79,14 @@
 | Vector DB | ChromaDB (persistent) |
 | SQL | SQLite + SQLAlchemy async |
 | Backend | FastAPI (Python 3.11+) |
-| MCP-сервер | FastMCP (`veyra-mcp/`), streamable-http |
+| MCP-сервер | FastMCP (`ai-lab-mcp/`), streamable-http |
 | Frontend (админ-панель) | React + TypeScript + Tailwind + Vite |
 | Web search | Brave Search API (опционально, free tier 2000/мес) или Tavily |
 
 ## Структура
 
 ```
-Veyra/
+AI Lab/
 ├── backend/                ── ДВИЖОК (Слой 1) ──
 │   ├── app/
 │   │   ├── agents/          # orchestrator (intent+memory), docs
@@ -99,8 +99,8 @@ Veyra/
 │   │   └── storage/         # ChromaDB + SQLite wrappers
 │   ├── tests/ · requirements.txt · Dockerfile · .env.example
 ├── frontend/               ── React/Vite UI (админ-панель) ──
-├── veyra-mcp/              ── MCP-СЕРВЕР (Слой 2): 8 data-инструментов ──
-├── veyra-skill/            ── НАВЫК для Avito skills-hub (Слой 3) ──
+├── ai-lab-mcp/              ── MCP-СЕРВЕР (Слой 2): 8 data-инструментов ──
+├── ai-lab-skill/            ── НАВЫК для Avito skills-hub (Слой 3) ──
 ├── scripts/                ── index_docs.py, run_gate.py, eval_detectors.py, regression.py, hooks/ ──
 ├── data/                   # data/docs, data/chroma, khronika.db (gitignored)
 ├── docker-compose.yml
@@ -114,7 +114,7 @@ Veyra/
     ├── GAP-ANALYSIS-AVITO.md  сравнение с AI-экосистемой Avito
     ├── STATUS.md           снимок статуса сессии
     ├── gate_report.md      результаты гейта детекторов
-    └── TZ-Veyra.md         техническое задание (v1.4)
+    └── TZ.md         техническое задание (v1.4)
 ```
 
 ## Быстрый старт (локально, без Docker)
@@ -171,7 +171,7 @@ LLM_MODEL=moonshot-v1-128k
 | Find logic signals (pairwise LLM) | ✅ |
 | Initiative review (RAG + contradictions + LLM synthesis) | ✅ |
 | Grounding фактов (regex/fuzzy match) — защита от галлюцинаций | ✅ |
-| veyra-mcp — 8 data-инструментов (alpha, не в production mcp-registry) | ✅ |
+| ai-lab-mcp — 8 data-инструментов (alpha, не в production mcp-registry) | ✅ |
 | Изоляция серверного «мозга» — флаг `ENABLE_LEGACY_CHAT` | ✅ |
 | Eval-харнес precision детекторов (`scripts/eval_detectors.py`) | ✅ каркас, не прогнан |
 | Регрессионный харнес (`scripts/regression.py` + git-хук) | ✅ каркас, baseline не заведён |
@@ -190,5 +190,5 @@ LLM_MODEL=moonshot-v1-128k
 | Фаза 3 | Публикация skill, пилот на 3 пользователях ASD Goods |
 | Фаза 4 (опц.) | Проактивность через n8n — ночной дайджест расхождений |
 
-Полное ТЗ: [`docs/TZ-Veyra.md`](docs/TZ-Veyra.md) ·
+Полное ТЗ: [`docs/TZ.md`](docs/TZ.md) ·
 индекс документации: [`docs/README.md`](docs/README.md)

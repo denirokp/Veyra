@@ -1,7 +1,7 @@
 """API чата — два РАЗНЫХ эндпоинта, не путать.
 
   GET  /api/retrieve — ЦЕЛЕВОЙ ПУТЬ. Чистый retrieval, без LLM. Источник
-                       данных для veyra-mcp: сервер отдаёт куски
+                       данных для ai-lab-mcp: сервер отдаёт куски
                        документов, рассуждение делает Claude. Всегда
                        включён, это слой данных.
 
@@ -9,7 +9,7 @@
                        синтезируют ответ на сервере (LLM на живом пути).
                        Используется только React-админ-панелью, продуктовым
                        путём НЕ является. Гейтится флагом ENABLE_LEGACY_CHAT.
-                       Продуктовый живой путь — Claude через veyra-mcp;
+                       Продуктовый живой путь — Claude через ai-lab-mcp;
                        серверный мозг развивать не нужно.
 """
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,7 +30,7 @@ async def chat(
 ) -> ChatResponse:
     """LEGACY серверный мозг — только для React-админ-панели.
 
-    Продуктовый живой путь — Claude через veyra-mcp, не этот эндпоинт.
+    Продуктовый живой путь — Claude через ai-lab-mcp, не этот эндпоинт.
     Отключается флагом ENABLE_LEGACY_CHAT=0 (см. settings.py).
     """
     if not settings.ENABLE_LEGACY_CHAT:
@@ -38,7 +38,7 @@ async def chat(
             status_code=404,
             detail=(
                 "Серверный /api/chat отключён (ENABLE_LEGACY_CHAT=0). "
-                "Живой путь — Claude через veyra-mcp."
+                "Живой путь — Claude через ai-lab-mcp."
             ),
         )
     return await orchestrator.run(request, db=db)
@@ -52,7 +52,7 @@ async def retrieve_passages(
 ):
     """Чистый retrieval — релевантные фрагменты корпуса БЕЗ LLM-синтеза.
 
-    Целевой путь: это сырьё для veyra-mcp — сервер отдаёт куски
+    Целевой путь: это сырьё для ai-lab-mcp — сервер отдаёт куски
     документов, а рассуждение (синтез ответа, написание, анализ) делает
     уже Claude. LLM здесь не вызывается — только локальные эмбеддинги +
     BM25. Не гейтится ENABLE_LEGACY_CHAT — это слой данных, не «мозг».

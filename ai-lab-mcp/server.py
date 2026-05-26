@@ -1,21 +1,21 @@
-"""veyra-mcp — MCP-сервер Veyra.
+"""ai-lab-mcp — MCP-сервер AI Lab.
 
-СЛОЙ ДАННЫХ. veyra-mcp не рассуждает и не вызывает LLM в живом пути —
-он только ПОДТЯГИВАЕТ материал из корпоративной памяти Veyra:
+СЛОЙ ДАННЫХ. ai-lab-mcp не рассуждает и не вызывает LLM в живом пути —
+он только ПОДТЯГИВАЕТ материал из корпоративной памяти AI Lab:
 фрагменты документов, предвычисленные расхождения/обещания, карточки
 документов. Рассуждение (синтез ответа, написание, веб-обогащение,
-анализ серых зон) делает Claude — veyra-mcp даёт ему сырьё.
+анализ серых зон) делает Claude — ai-lab-mcp даёт ему сырьё.
 
 Три слоя архитектуры:
   1. Индексация (батч) — детекторы движка варят «бульон» в таблицы.
-  2. veyra-mcp (живой путь) — ЧИСТЫЕ данные, ноль LLM, ноль токенов.
-  3. Claude — берёт данные veyra-mcp и рассуждает поверх.
+  2. ai-lab-mcp (живой путь) — ЧИСТЫЕ данные, ноль LLM, ноль токенов.
+  3. Claude — берёт данные ai-lab-mcp и рассуждает поверх.
 
 ЭТАП: alpha — не в production mcp-registry до полного retrieval-гейта.
 
 Запуск:
     pip install -r requirements.txt
-    VEYRA_BACKEND_URL=http://localhost:8000 python server.py
+    AILAB_BACKEND_URL=http://localhost:8000 python server.py
 """
 from __future__ import annotations
 
@@ -24,14 +24,14 @@ import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-BACKEND_URL = os.getenv("VEYRA_BACKEND_URL", "http://localhost:8000").rstrip("/")
-BACKEND_TOKEN = os.getenv("VEYRA_BACKEND_TOKEN", "")
-HTTP_TIMEOUT = float(os.getenv("VEYRA_HTTP_TIMEOUT", "60"))
+BACKEND_URL = os.getenv("AILAB_BACKEND_URL", "http://localhost:8000").rstrip("/")
+BACKEND_TOKEN = os.getenv("AILAB_BACKEND_TOKEN", "")
+HTTP_TIMEOUT = float(os.getenv("AILAB_HTTP_TIMEOUT", "60"))
 
 mcp = FastMCP(
-    "veyra",
-    host=os.getenv("VEYRA_MCP_HOST", "0.0.0.0"),
-    port=int(os.getenv("VEYRA_MCP_PORT", "8765")),
+    "ai-lab",
+    host=os.getenv("AILAB_MCP_HOST", "0.0.0.0"),
+    port=int(os.getenv("AILAB_MCP_PORT", "8765")),
 )
 
 
@@ -117,7 +117,7 @@ async def corpus_stats() -> dict:
 
 @mcp.tool()
 async def health() -> dict:
-    """Доступность движка Veyra (backend)."""
+    """Доступность движка AI Lab (backend)."""
     res = await _get("/health")
     if isinstance(res, dict) and res.get("error"):
         return {"status": "backend_unreachable", "backend": BACKEND_URL,

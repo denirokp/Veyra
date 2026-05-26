@@ -1,10 +1,10 @@
-"""Сборка Confluence-страницы по результату разбора Veyra.
+"""Сборка Confluence-страницы по результату разбора AI Lab.
 
 Формат — заголовок + ответ + таблица расхождений + источники, по
 образцу скилла quality-metrics. Только stdlib.
 
 Скрипт ничего не вызывает и не рассуждает — он форматирует структуру
-разбора, которую собрал Claude (данные veyra-mcp + его рассуждение).
+разбора, которую собрал Claude (данные ai-lab-mcp + его рассуждение).
 
 Вход (stdin): JSON следующей структуры:
 {answer, facts[], warnings[], hypotheses[], requires_verification[], metadata}.
@@ -20,8 +20,8 @@ import sys
 def build_report(result: dict) -> str:
     if result.get("error"):
         return (
-            "h2. Veyra — отчёт\n\n"
-            f"{{warning}}Veyra недоступна: {result['error']}{{warning}}\n"
+            "h2. AI Lab — отчёт\n\n"
+            f"{{warning}}AI Lab недоступна: {result['error']}{{warning}}\n"
         )
 
     answer = (result.get("answer") or "").strip()
@@ -29,7 +29,7 @@ def build_report(result: dict) -> str:
     facts = result.get("facts") or []
     requires = result.get("requires_verification") or []
 
-    lines = ["h2. Veyra — сверка с корпоративной памятью", ""]
+    lines = ["h2. AI Lab — сверка с корпоративной памятью", ""]
     if answer:
         lines += [answer, ""]
 
@@ -71,6 +71,6 @@ def build_report(result: dict) -> str:
 if __name__ == "__main__":
     raw = sys.stdin.read()
     if not raw.strip():
-        print("Передай JSON-ответ инструмента veyra через stdin")
+        print("Передай JSON-ответ инструмента ai-lab через stdin")
         sys.exit(1)
     print(build_report(json.loads(raw)))

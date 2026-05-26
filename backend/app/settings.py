@@ -71,10 +71,10 @@ class Settings(BaseSettings):
 
     # Серверный «мозг» POST /api/chat (orchestrator + docs-agent, LLM на
     # живом пути) — LEGACY. Продуктовый живой путь — Claude через
-    # veyra-mcp; серверный /api/chat нужен только React-админ-панели.
+    # ai-lab-mcp; серверный /api/chat нужен только React-админ-панели.
     # В production-деплое без панели можно выключить
     # (ENABLE_LEGACY_CHAT=0) — останется чистый слой данных (/api/retrieve
-    # и data-эндпоинты), который и потребляет veyra-mcp.
+    # и data-эндпоинты), который и потребляет ai-lab-mcp.
     ENABLE_LEGACY_CHAT: bool = True
 
 

@@ -58,7 +58,7 @@ def _check_server() -> bool:
         return True
     except urllib.error.URLError as exc:
         print(f"❌ Сервер на {BASE} недоступен: {exc.reason}")
-        print("   Подними бэкенд:  cd ~/Veyra/backend && uvicorn app.main:app")
+        print("   Подними бэкенд:  cd ~/AI Lab/backend && uvicorn app.main:app")
         return False
     except Exception as exc:  # noqa: BLE001
         print(f"❌ /health не ответил: {exc}")

@@ -1,23 +1,23 @@
-# veyra-mcp
+# ai-lab-mcp
 
-MCP-сервер Veyra — корпоративная память коммерческого блока Avito как
+MCP-сервер AI Lab — корпоративная память коммерческого блока Avito как
 набор инструментов для Claude / Avito AI.
 
 ## Архитектура
 
-`veyra-mcp` — **тонкий MCP-фасад**. Он не содержит логики: каждый
+`ai-lab-mcp` — **тонкий MCP-фасад**. Он не содержит логики: каждый
 инструмент проксирует запрос в HTTP-API движка (`backend/`). Движок
 остаётся «толстым» сервисом — индекс корпуса, детекторы, память.
-veyra-mcp отдаёт его наружу по протоколу MCP.
+ai-lab-mcp отдаёт его наружу по протоколу MCP.
 
 ```
-Claude / Avito AI ──MCP (streamable-http)──> veyra-mcp ──HTTP──> backend (движок)
+Claude / Avito AI ──MCP (streamable-http)──> ai-lab-mcp ──HTTP──> backend (движок)
 ```
 
 ## Статус: alpha
 
 Все 8 инструментов — **чистые data-вызовы (GET к движку), ноль LLM на
-стороне `veyra-mcp`.** Это и есть соответствие ТЗ, Принцип 1: на живом
+стороне `ai-lab-mcp`.** Это и есть соответствие ТЗ, Принцип 1: на живом
 пути MCP не запускает рассуждение, только подаёт предвычисленные данные
 и фрагменты корпуса. `search_corpus` отдаёт сырьё retrieval (без
 синтеза); рассуждение делает Claude.
@@ -29,22 +29,22 @@ Claude / Avito AI ──MCP (streamable-http)──> veyra-mcp ──HTTP──>
 ## Запуск
 
 ```bash
-cd veyra-mcp
+cd ai-lab-mcp
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # движок (backend) должен быть поднят отдельно — по умолчанию :8000
-VEYRA_BACKEND_URL=http://localhost:8000 python server.py
+AILAB_BACKEND_URL=http://localhost:8000 python server.py
 ```
 
 Переменные окружения:
 
 | Переменная | Назначение | По умолчанию |
 |---|---|---|
-| `VEYRA_BACKEND_URL` | адрес движка Veyra | `http://localhost:8000` |
-| `VEYRA_BACKEND_TOKEN` | bearer-токен бэкенда (если включён `API_AUTH_TOKEN`) | пусто |
-| `VEYRA_MCP_HOST` / `VEYRA_MCP_PORT` | адрес самого MCP-сервера | `0.0.0.0` / `8765` |
-| `VEYRA_HTTP_TIMEOUT` | таймаут запроса к бэкенду, сек | `60` |
+| `AILAB_BACKEND_URL` | адрес движка AI Lab | `http://localhost:8000` |
+| `AILAB_BACKEND_TOKEN` | bearer-токен бэкенда (если включён `API_AUTH_TOKEN`) | пусто |
+| `AILAB_MCP_HOST` / `AILAB_MCP_PORT` | адрес самого MCP-сервера | `0.0.0.0` / `8765` |
+| `AILAB_HTTP_TIMEOUT` | таймаут запроса к бэкенду, сек | `60` |
 
 ## Инструменты
 
@@ -68,7 +68,7 @@ VEYRA_BACKEND_URL=http://localhost:8000 python server.py
 ```json
 {
   "mcpServers": {
-    "veyra": { "url": "http://<host>:8765/mcp" }
+    "ai-lab": { "url": "http://<host>:8765/mcp" }
   }
 }
 ```
@@ -77,8 +77,8 @@ VEYRA_BACKEND_URL=http://localhost:8000 python server.py
 
 - Точный формат регистрации remote-MCP в Avito mcp-hub — сверить по
   `docs.k.avito.ru/mcp-hub` (путь mount, требования к health).
-- Авторизация самого veyra-mcp (кто может звать инструменты) — через
+- Авторизация самого ai-lab-mcp (кто может звать инструменты) — через
   mcp-hub / Keycloak; на этапе alpha доступ только разработчикам.
 - ✅ Прогон против живого MCP-клиента — проверено end-to-end: Claude Desktop
-  (custom connector, streamable-http через cloudflared-туннель) → veyra-mcp →
+  (custom connector, streamable-http через cloudflared-туннель) → ai-lab-mcp →
   корпус, на боевом документе. Все 8 инструментов отработали.

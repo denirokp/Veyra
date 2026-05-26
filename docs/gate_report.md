@@ -1,4 +1,4 @@
-# Gate Report — Veyra (ТЗ Фаза 1, Трек A)
+# Gate Report — AI Lab (ТЗ Фаза 1, Трек A)
 
 **Дата:** 2026-05-17
 **Корпус:** 3 документа — D1 «Progress plan CY25», D2 «Sellers' education strategy 2025», D3 «B2C Journey — Deep Dive».
