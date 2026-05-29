@@ -13,58 +13,49 @@ from __future__ import annotations
 
 import email
 import email.policy
+import re
 import sys
-from html.parser import HTMLParser
+from html import unescape
 from pathlib import Path
 
 
-class HTMLTextExtractor(HTMLParser):
-    SKIP_TAGS = {"script", "style", "head", "meta"}
-    BLOCK_TAGS = {
-        "p", "div", "br", "tr", "li",
-        "h1", "h2", "h3", "h4", "h5", "h6",
-    }
-    CELL_TAGS = {"td", "th"}
+_SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script>", re.DOTALL | re.IGNORECASE)
+_STYLE_RE = re.compile(r"<style\b[^>]*>.*?</style>", re.DOTALL | re.IGNORECASE)
+_HEAD_RE = re.compile(r"<head\b[^>]*>.*?</head>", re.DOTALL | re.IGNORECASE)
+_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_BLOCK_OPEN_RE = re.compile(
+    r"<(p|div|br|tr|li|h[1-6])\b[^>]*/?>", re.IGNORECASE
+)
+_BLOCK_CLOSE_RE = re.compile(r"</(p|div|tr|li|h[1-6])>", re.IGNORECASE)
+_CELL_OPEN_RE = re.compile(r"<(td|th)\b[^>]*>", re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-        self.skip_depth = 0
 
-    def handle_starttag(self, tag: str, attrs):  # type: ignore[override]
-        if tag in self.SKIP_TAGS:
-            self.skip_depth += 1
-            return
-        if tag in self.BLOCK_TAGS:
-            self.parts.append("\n")
-        elif tag in self.CELL_TAGS:
-            self.parts.append("\t")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in self.SKIP_TAGS and self.skip_depth > 0:
-            self.skip_depth -= 1
-            return
-        if tag in self.BLOCK_TAGS:
-            self.parts.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if self.skip_depth == 0:
-            self.parts.append(data)
-
-    def text(self) -> str:
-        raw = "".join(self.parts)
-        lines = [ln.strip() for ln in raw.splitlines()]
-        out: list[str] = []
-        prev_blank = False
-        for ln in lines:
-            if not ln:
-                if not prev_blank:
-                    out.append("")
-                prev_blank = True
-            else:
-                out.append(ln)
-                prev_blank = False
-        return "\n".join(out).strip()
+def html_to_text(html: str) -> str:
+    """Конвертирует HTML в чистый текст: убирает script/style/head/comments,
+    переводит блочные теги в \\n, ячейки в \\t, остальные теги выкидывает,
+    декодирует HTML-entities, сжимает пробелы."""
+    html = _SCRIPT_RE.sub(" ", html)
+    html = _STYLE_RE.sub(" ", html)
+    html = _HEAD_RE.sub(" ", html)
+    html = _COMMENT_RE.sub(" ", html)
+    html = _BLOCK_OPEN_RE.sub("\n", html)
+    html = _BLOCK_CLOSE_RE.sub("\n", html)
+    html = _CELL_OPEN_RE.sub("\t", html)
+    html = _TAG_RE.sub("", html)
+    html = unescape(html)
+    lines = [" ".join(ln.split()) for ln in html.splitlines()]
+    out: list[str] = []
+    prev_blank = False
+    for ln in lines:
+        if not ln:
+            if not prev_blank:
+                out.append("")
+            prev_blank = True
+        else:
+            out.append(ln)
+            prev_blank = False
+    return "\n".join(out).strip()
 
 
 def is_mhtml(path: Path) -> bool:
@@ -94,9 +85,7 @@ def decode_one(path: Path) -> str | None:
             break
     if not html_text:
         return None
-    parser = HTMLTextExtractor()
-    parser.feed(html_text)
-    return parser.text()
+    return html_to_text(html_text)
 
 
 def main() -> None:
