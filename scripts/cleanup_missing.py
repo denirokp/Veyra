@@ -42,15 +42,17 @@ async def main() -> None:
     removed: list[str] = []
     async with AsyncSession(engine) as db:
         docs = await list_documents(db, workspace=workspace)
-        for d in docs:
-            path = d.file_path
-            if not path:
+        snapshot = [
+            (d.id, (d.file_path or ""), (d.title or "")) for d in docs
+        ]
+        for doc_id, file_path, title in snapshot:
+            if not file_path:
                 continue
-            if not Path(path).exists():
-                vector_db.delete_document_chunks(d.id, "actual", workspace)
-                vector_db.delete_document_chunks(d.id, "archive", workspace)
-                await cascade_delete_document(db, d.id)
-                removed.append(d.title or path)
+            if not Path(file_path).exists():
+                vector_db.delete_document_chunks(doc_id, "actual", workspace)
+                vector_db.delete_document_chunks(doc_id, "archive", workspace)
+                await cascade_delete_document(db, doc_id)
+                removed.append(title or file_path)
     print(f"Workspace: {workspace}")
     print(f"Удалено документов с отсутствующим файлом: {len(removed)}")
     for name in removed:

@@ -44,14 +44,16 @@ async def main() -> None:
     removed: list[str] = []
     async with AsyncSession(engine) as db:
         docs = await list_documents(db, workspace=workspace)
-        print(f"Workspace: {workspace} — всего документов: {len(docs)}")
-        for d in docs:
-            path = (d.file_path or "").lower()
-            if path.endswith(ext):
-                vector_db.delete_document_chunks(d.id, "actual", workspace)
-                vector_db.delete_document_chunks(d.id, "archive", workspace)
-                await cascade_delete_document(db, d.id)
-                removed.append(d.title or d.file_path or d.id)
+        snapshot = [
+            (d.id, (d.file_path or ""), (d.title or "")) for d in docs
+        ]
+        print(f"Workspace: {workspace} — всего документов: {len(snapshot)}")
+        for doc_id, file_path, title in snapshot:
+            if file_path.lower().endswith(ext):
+                vector_db.delete_document_chunks(doc_id, "actual", workspace)
+                vector_db.delete_document_chunks(doc_id, "archive", workspace)
+                await cascade_delete_document(db, doc_id)
+                removed.append(title or file_path or doc_id)
     print(f"Удалено документов с расширением {ext}: {len(removed)}")
     for name in removed[:5]:
         print(f"  - {name}")
