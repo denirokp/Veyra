@@ -1,0 +1,43 @@
+# Fly.io: один контейнер backend+MCP, наружу только MCP :8765, данные на volume.
+# Имя приложения подставит `fly launch` — этот файл шаблон.
+
+app = "ai-lab"
+primary_region = "ams"  # Амстердам — близко к РФ и к Anthropic.
+
+[build]
+  # Dockerfile в корне репозитория.
+
+[env]
+  AILAB_BACKEND_URL = "http://localhost:8000"
+  AILAB_MCP_HOST = "0.0.0.0"
+  AILAB_MCP_PORT = "8765"
+  # backend читает settings из cwd=backend/, поэтому относительные пути ниже
+  # резолвятся в /app/backend/data/* — куда смонтирован volume.
+  DATABASE_URL = "sqlite+aiosqlite:///./data/khronika.db"
+  CHROMA_PERSIST_DIR = "./data/chroma"
+  DOCS_DIR = "./data/docs"
+  # Detectors при индексации требуют LLM-ключ, но на живом пути MCP они не
+  # вызываются. Ключ всё равно нужен в env, чтобы settings не упал на validation
+  # (если в коде есть required-проверка). Подставляется через fly secrets.
+
+[[mounts]]
+  source = "ai_lab_data"
+  destination = "/app/backend/data"
+
+[http_service]
+  internal_port = 8765
+  force_https = true
+  auto_stop_machines = "off"  # не выключать машину — embed-модель грузится 10–20с
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 25
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory_mb = 2048  # embed-модель + chroma + sqlite ~1.2 GB резидент.

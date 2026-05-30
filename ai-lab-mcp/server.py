@@ -23,16 +23,31 @@ import os
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 BACKEND_URL = os.getenv("AILAB_BACKEND_URL", "http://localhost:8000").rstrip("/")
 BACKEND_TOKEN = os.getenv("AILAB_BACKEND_TOKEN", "")
 HTTP_TIMEOUT = float(os.getenv("AILAB_HTTP_TIMEOUT", "60"))
+# Bearer-токен для ВХОДЯЩИХ запросов от Claude/Avito AI. Пустая строка =
+# auth выключен (dev). В проде задавать через env / fly secrets.
+MCP_AUTH_TOKEN = os.getenv("MCP_AUTH_TOKEN", "")
 
-mcp = FastMCP(
-    "ai-lab",
-    host=os.getenv("AILAB_MCP_HOST", "0.0.0.0"),
-    port=int(os.getenv("AILAB_MCP_PORT", "8765")),
-)
+HOST = os.getenv("AILAB_MCP_HOST", "0.0.0.0")
+PORT = int(os.getenv("AILAB_MCP_PORT", "8765"))
+
+mcp = FastMCP("ai-lab", host=HOST, port=PORT)
+
+
+class BearerAuthMiddleware(BaseHTTPMiddleware):
+    """Требует `Authorization: Bearer <MCP_AUTH_TOKEN>` на всех запросах."""
+
+    async def dispatch(self, request, call_next):
+        auth = request.headers.get("authorization", "")
+        expected = f"Bearer {MCP_AUTH_TOKEN}"
+        if auth != expected:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        return await call_next(request)
 
 
 def _headers() -> dict:
@@ -130,4 +145,11 @@ async def health() -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    if MCP_AUTH_TOKEN:
+        import uvicorn
+        app = mcp.streamable_http_app()
+        app.add_middleware(BearerAuthMiddleware)
+        uvicorn.run(app, host=HOST, port=PORT)
+    else:
+        # Dev-режим без auth — для локальной разработки.
+        mcp.run(transport="streamable-http")
