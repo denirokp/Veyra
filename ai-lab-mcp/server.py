@@ -19,12 +19,18 @@
 """
 from __future__ import annotations
 
+import functools
+import logging
 import os
+import time
+from collections import defaultdict
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+
+logger = logging.getLogger("ai-lab-mcp")
 
 BACKEND_URL = os.getenv("AILAB_BACKEND_URL", "http://localhost:8000").rstrip("/")
 BACKEND_TOKEN = os.getenv("AILAB_BACKEND_TOKEN", "")
@@ -37,6 +43,31 @@ HOST = os.getenv("AILAB_MCP_HOST", "0.0.0.0")
 PORT = int(os.getenv("AILAB_MCP_PORT", "8765"))
 
 mcp = FastMCP("ai-lab", host=HOST, port=PORT)
+
+
+# G6 — наблюдаемость: счётчик вызовов на каждый MCP-инструмент. Живой путь
+# ai-lab-mcp не вызывает LLM (ноль токенов/стоимости), поэтому здесь считаем
+# не $, а ЧИСЛО tool-call: что и как часто дёргает Claude. Счётчик in-process,
+# сбрасывается при рестарте; видно в логах и через инструмент health().
+_TOOL_CALLS: dict[str, int] = defaultdict(int)
+
+
+def _tracked(fn):
+    """Логирует и считает каждый вызов инструмента (имя, № вызова, латентность).
+    Ставится ПОД @mcp.tool() — functools.wraps сохраняет сигнатуру и docstring,
+    поэтому схема инструмента у FastMCP не меняется."""
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        _TOOL_CALLS[fn.__name__] += 1
+        t0 = time.perf_counter()
+        try:
+            return await fn(*args, **kwargs)
+        finally:
+            logger.info(
+                "tool=%s call#%d %.0fms",
+                fn.__name__, _TOOL_CALLS[fn.__name__], (time.perf_counter() - t0) * 1000,
+            )
+    return wrapper
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):
@@ -69,6 +100,7 @@ async def _get(path: str, params: dict | None = None):
 
 
 @mcp.tool()
+@_tracked
 async def search_corpus(query: str, top_k: int = 10, workspace: str = "default") -> dict:
     """Поиск по корпоративной памяти — возвращает РЕЛЕВАНТНЫЕ ФРАГМЕНТЫ
     документов (сырьё, не готовый ответ). Синтезируй ответ сам из этих
@@ -83,6 +115,7 @@ async def search_corpus(query: str, top_k: int = 10, workspace: str = "default")
 
 
 @mcp.tool()
+@_tracked
 async def find_numeric_contradictions() -> dict:
     """Предвычисленные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с
     разными значениями (между документами и внутри документа).
@@ -93,6 +126,7 @@ async def find_numeric_contradictions() -> dict:
 
 
 @mcp.tool()
+@_tracked
 async def find_logic_contradictions() -> dict:
     """Предвычисленные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
     смыслу утверждения. Готовая таблица, без LLM-вызова. Каждая запись
@@ -102,6 +136,7 @@ async def find_logic_contradictions() -> dict:
 
 
 @mcp.tool()
+@_tracked
 async def find_open_promises() -> dict:
     """Предвычисленные незакрытые обещания (open / overdue) — что
     обещали в документах и не отметили выполненным. Готовая таблица.
@@ -110,6 +145,7 @@ async def find_open_promises() -> dict:
 
 
 @mcp.tool()
+@_tracked
 async def list_documents() -> dict:
     """Список документов корпуса (id, название, статус, тип) — чтобы
     понять, что вообще есть в памяти, и выбрать документ для разбора.
@@ -118,6 +154,7 @@ async def list_documents() -> dict:
 
 
 @mcp.tool()
+@_tracked
 async def get_document(doc_id: str) -> dict:
     """Полный текст документа корпуса по id — чтобы вчитаться в один
     документ целиком (агентный разбор, проверка цитаты). id берётся из
@@ -127,6 +164,7 @@ async def get_document(doc_id: str) -> dict:
 
 
 @mcp.tool()
+@_tracked
 async def corpus_stats() -> dict:
     """Сводка по корпусу: число документов, расхождений, обещаний,
     логических сигналов.
@@ -135,13 +173,16 @@ async def corpus_stats() -> dict:
 
 
 @mcp.tool()
+@_tracked
 async def health() -> dict:
-    """Доступность движка AI Lab (backend)."""
+    """Доступность движка AI Lab (backend) + счётчик вызовов инструментов
+    (G6 — сколько раз с момента старта дёрнут каждый инструмент)."""
     res = await _get("/health")
+    tool_calls = dict(_TOOL_CALLS)
     if isinstance(res, dict) and res.get("error"):
         return {"status": "backend_unreachable", "backend": BACKEND_URL,
-                "detail": res["error"]}
-    return {"status": "ok", "backend": BACKEND_URL}
+                "detail": res["error"], "tool_calls": tool_calls}
+    return {"status": "ok", "backend": BACKEND_URL, "tool_calls": tool_calls}
 
 
 if __name__ == "__main__":

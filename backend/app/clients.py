@@ -11,6 +11,7 @@ from typing import Awaitable, Callable, TypeVar
 
 import openai
 
+from app.observability import record_llm_usage
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -126,6 +127,14 @@ async def call_llm(
                 model=model or settings.LLM_MODEL,
                 max_tokens=max_tokens,
                 messages=[{"role": "system", "content": system}, *messages],
+            )
+        # G6 — учёт токенов/стоимости. usage может отсутствовать у части провайдеров.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            record_llm_usage(
+                model or settings.LLM_MODEL,
+                getattr(usage, "prompt_tokens", 0) or 0,
+                getattr(usage, "completion_tokens", 0) or 0,
             )
         # reasoning-модели и редкие провайдер-ошибки иногда возвращают content=None
         return (response.choices[0].message.content or "").strip()

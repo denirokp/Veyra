@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     # поставить дешёвую/быструю модель. Пусто → используется LLM_MODEL.
     LLM_MODEL_FAST: str = ""
 
+    # G6 — учёт стоимости LLM. Цена в USD за 1М токенов; 0 = не считать $
+    # (копим только токены). Переопредели под своего провайдера
+    # (Moonshot/OpenAI/Avito proxy) — снимок отдаёт GET /api/metrics/usage.
+    LLM_PRICE_INPUT_PER_1M: float = 0.0
+    LLM_PRICE_OUTPUT_PER_1M: float = 0.0
+
     # Embeddings — локальная sentence-transformers модель (без интернета).
     # Первый запуск скачивает ~500МБ в ~/.cache/huggingface.
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"

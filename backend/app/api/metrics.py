@@ -6,7 +6,18 @@
 """
 from fastapi import APIRouter, HTTPException
 
+from app.observability import snapshot
+
 router = APIRouter(tags=["metrics"])
+
+
+@router.get("/metrics/usage")
+async def usage_metrics():
+    """G6 — учёт стоимости LLM и числа вызовов с момента старта процесса.
+    In-process MVP (сбрасывается при рестарте); долговременная агрегация —
+    внешний Redash, см. /metrics/agent. cost_priced=false → цены не заданы,
+    $ нулевые, считаются только токены (LLM_PRICE_*_PER_1M в settings)."""
+    return snapshot()
 
 
 @router.get("/metrics/agent")
