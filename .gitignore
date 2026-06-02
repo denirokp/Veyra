@@ -94,3 +94,6 @@ data/*.db
 
 # Style profile (генерируется автоматически)
 backend/app/skills/style_profile.json
+
+# Разовый пакет для рассылки коллегам (собирается из docs/ + ai-lab-skill.zip)
+/AI-Lab-connect.zip
