@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html,body { width:1280px; height:720px; }
+  body { font-family: "DejaVu Sans", -apple-system, "Segoe UI", Roboto, sans-serif; color:#0f172a; background:#ffffff; padding:44px 56px; overflow:hidden; display:flex; flex-direction:column; }
+  .title { font-size:42px; font-weight:800; letter-spacing:-0.5px; }
+  .sub { font-size:20px; color:#475569; margin-top:8px; }
+  .sub b { color:#2563eb; }
+
+  .stage-label { display:inline-block; font-size:15px; font-weight:700; letter-spacing:0.6px; padding:6px 16px; border-radius:20px; }
+  .off { background:#f1f5f9; color:#475569; }
+  .on  { background:#dbeafe; color:#1d4ed8; }
+
+  .lane { display:flex; align-items:stretch; gap:0; margin-top:14px; }
+  .box { flex:1; border:1.5px solid #e2e8f0; border-radius:14px; padding:18px 18px; background:#fff; box-shadow:0 1px 3px rgba(15,23,42,.05); display:flex; flex-direction:column; justify-content:center; }
+  .box .h { font-size:21px; font-weight:700; display:flex; align-items:center; gap:9px; }
+  .box .d { font-size:15px; color:#64748b; margin-top:7px; line-height:1.4; }
+  .box.kb { border-color:#2563eb; background:#eff6ff; }
+  .box.claude { border-color:#7c3aed; background:#f5f3ff; }
+  .box.ans { border-color:#10b981; background:#ecfdf5; }
+  .arrow { flex:0 0 54px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#94a3b8; }
+  .arrow .g { font-size:32px; line-height:1; }
+  .arrow .t { font-size:12px; color:#94a3b8; margin-top:3px; text-align:center; }
+
+  .midnote { text-align:center; margin:16px 0; font-size:16px; color:#1d4ed8; font-weight:600; }
+
+  .takeaways { display:flex; gap:18px; margin-top:26px; }
+  .tk { flex:1; border-radius:12px; padding:16px 18px; font-size:15px; line-height:1.45; background:#f8fafc; border:1px solid #e2e8f0; }
+  .tk b { display:block; font-size:16px; margin-bottom:4px; color:#0f172a; }
+  .tk.b1 b { color:#7c3aed; } .tk.b2 b { color:#2563eb; } .tk.b3 b { color:#059669; }
+
+  .stack { margin-top:auto; font-size:14px; color:#64748b; border-top:1px solid #e2e8f0; padding-top:16px; }
+  .stack b { color:#334155; }
+
+  .foot { text-align:right; margin-top:10px; font-size:12px; color:#94a3b8; }
+</style>
+</head>
+<body>
+
+  <div class="title">Как устроен AI Lab</div>
+  <div class="sub"><b>Дорогой анализ считаем заранее</b> — поэтому ответ на ваш вопрос мгновенный, бесплатный и со ссылками на документы.</div>
+
+  <div style="margin-top:18px"><span class="stage-label off">ЭТАП 1 · ЗАРАНЕЕ — один раз при загрузке корпуса (офлайн)</span></div>
+  <div class="lane">
+    <div class="box">
+      <div class="h">📄 Документы Avito</div>
+      <div class="d">83 файла: стратегии + регламенты бизнес-процессов</div>
+    </div>
+    <div class="arrow"><div class="g">→</div><div class="t">читаем,<br>режем</div></div>
+    <div class="box">
+      <div class="h">🔍 Детекторы</div>
+      <div class="d">находят, где цифры спорят, что обещали и не сделали, логические нестыковки</div>
+    </div>
+    <div class="arrow"><div class="g">→</div><div class="t">складываем</div></div>
+    <div class="box kb">
+      <div class="h">🗄️ База знаний</div>
+      <div class="d">готовая картотека находок + смысловой поиск по тексту</div>
+    </div>
+  </div>
+
+  <div class="midnote">⬇ &nbsp; в момент вопроса AI Lab просто берёт готовые факты из Базы знаний — без повторного анализа</div>
+
+  <div><span class="stage-label on">ЭТАП 2 · КОГДА ВЫ СПРАШИВАЕТЕ — мгновенно, без затрат (онлайн)</span></div>
+  <div class="lane">
+    <div class="box">
+      <div class="h">🙋 Вы</div>
+      <div class="d">вопрос обычными словами</div>
+    </div>
+    <div class="arrow"><div class="g">→</div></div>
+    <div class="box claude">
+      <div class="h">🤖 Claude</div>
+      <div class="d">понимает вопрос, рассуждает, пишет ответ</div>
+    </div>
+    <div class="arrow"><div class="g">⇄</div><div class="t">просит<br>факты</div></div>
+    <div class="box">
+      <div class="h">🔌 AI Lab</div>
+      <div class="d">отдаёт фрагменты и картотеку — <b>без ИИ, 0 токенов</b></div>
+    </div>
+    <div class="arrow"><div class="g">→</div></div>
+    <div class="box ans">
+      <div class="h">✅ Ответ</div>
+      <div class="d">с цитатами и ссылками на документы-источники</div>
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <div class="tk b1"><b>Claude думает — AI Lab подаёт факты</b>Разделение ролей: данные отдельно, рассуждение отдельно → меньше «выдумок».</div>
+    <div class="tk b2"><b>Тяжёлое — заранее</b>Анализ корпуса посчитан один раз. Живой ответ — мгновенный и без расхода токенов.</div>
+    <div class="tk b3"><b>Всё проверяемо</b>Каждая находка — с цитатой и ссылкой. Нет источника → находка не показывается.</div>
+  </div>
+
+  <div class="stack">⚙️ <b>Под капотом:</b> один контейнер на Fly.io · база SQLite + векторный поиск · протокол MCP (стандарт подключения к Claude) · локальная модель эмбеддингов</div>
+
+  <div class="foot">AI Lab — корпоративная память коммерческого блока Avito</div>
+
+</body>
+</html>
