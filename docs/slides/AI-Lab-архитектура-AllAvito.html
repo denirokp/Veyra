@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  * { box-sizing: border-box; margin:0; padding:0; }
+  html,body { width:1280px; height:720px; }
+  body { font-family:"DejaVu Sans",-apple-system,"Segoe UI",Roboto,sans-serif; color:#0f172a; background:#fff; padding:50px 60px; overflow:hidden; display:flex; flex-direction:column; }
+
+  .title { font-size:46px; font-weight:800; letter-spacing:-0.5px; }
+  .sub { font-size:21px; color:#475569; margin-top:10px; max-width:1050px; line-height:1.35; }
+  .sub b { color:#2563eb; }
+
+  .label { display:inline-block; font-size:16px; font-weight:700; letter-spacing:0.4px; padding:6px 18px; border-radius:22px; }
+  .l1 { background:#f1f5f9; color:#475569; }
+  .l2 { background:#dbeafe; color:#1d4ed8; }
+
+  .lane { display:flex; align-items:stretch; margin-top:16px; flex-shrink:0; }
+  .box { flex:1; border:2px solid #e2e8f0; border-radius:16px; padding:20px 20px; background:#fff; display:flex; flex-direction:column; justify-content:center; }
+  .box .h { font-size:25px; font-weight:700; display:flex; align-items:center; gap:11px; }
+  .box .d { font-size:16.5px; color:#64748b; margin-top:9px; line-height:1.4; }
+  .box.mem { border-color:#2563eb; background:#eff6ff; }
+  .box.claude { border-color:#7c3aed; background:#f5f3ff; }
+  .box.ans { border-color:#10b981; background:#ecfdf5; }
+  .arrow { flex:0 0 58px; display:flex; align-items:center; justify-content:center; font-size:36px; color:#94a3b8; }
+
+  .mid { text-align:center; margin:14px 0; font-size:18px; color:#1d4ed8; font-weight:600; }
+
+  .chips { display:flex; gap:20px; margin-top:auto; }
+  .chip { flex:1; border-radius:14px; padding:18px 20px; background:#f8fafc; border:1px solid #e2e8f0; font-size:20px; font-weight:700; display:flex; align-items:center; gap:12px; }
+  .chip span { font-size:30px; }
+</style>
+</head>
+<body>
+
+  <div class="title">Как работает AI Lab</div>
+  <div class="sub">Корпоративная память коммерческого блока — <b>читает все наши документы и сама находит, где они спорят друг с другом.</b></div>
+
+  <div style="margin-top:22px"><span class="label l1">СНАЧАЛА · готовим заранее, один раз</span></div>
+  <div class="lane">
+    <div class="box">
+      <div class="h">📚 Все документы</div>
+      <div class="d">стратегии, планы, регламенты — сотни страниц</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <div class="h">🔎 AI Lab их изучает</div>
+      <div class="d">находит нестыковки в цифрах, обещаниях и логике</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box mem">
+      <div class="h">🧠 Память готова</div>
+      <div class="d">все находки собраны и готовы к ответу</div>
+    </div>
+  </div>
+
+  <div class="mid">↓ &nbsp; дальше AI Lab отвечает из готовой памяти — ничего не пересчитывает заново</div>
+
+  <div><span class="label l2">ПОТОМ · когда вы спрашиваете — мгновенно</span></div>
+  <div class="lane">
+    <div class="box">
+      <div class="h">🙋 Вы</div>
+      <div class="d">спрашиваете обычными словами</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box claude">
+      <div class="h">💬 Claude</div>
+      <div class="d">отвечает на основе этой памяти</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box ans">
+      <div class="h">✅ Ответ</div>
+      <div class="d">со ссылкой на документ-источник</div>
+    </div>
+  </div>
+
+  <div class="chips">
+    <div class="chip"><span>⚡</span> Мгновенно и без затрат</div>
+    <div class="chip"><span>🔗</span> Всегда со ссылкой на источник</div>
+    <div class="chip"><span>🧠</span> Замечает то, что человек пропускает</div>
+  </div>
+
+</body>
+</html>
