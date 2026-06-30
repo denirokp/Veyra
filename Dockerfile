@@ -28,7 +28,8 @@ COPY ai-lab-mcp/server.py ./ai-lab-mcp/server.py
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Каталоги для БД/Chroma/embed-кэша. data/ переопределяется fly volume.
+# Каталоги для БД/Chroma/embed-кэша. data/ переопределяется fly volume,
+# а .hf_cache лежит ВНЕ volume (в слое образа) — туда запекаем модель ниже.
 RUN mkdir -p /app/backend/data/chroma /app/backend/data/docs /app/.hf_cache
 
 ENV PYTHONUNBUFFERED=1 \
@@ -37,6 +38,14 @@ ENV PYTHONUNBUFFERED=1 \
     AILAB_BACKEND_URL=http://localhost:8000 \
     AILAB_MCP_HOST=0.0.0.0 \
     AILAB_MCP_PORT=8765
+
+# Запекаем embedding-модель в образ на этапе сборки. Иначе ~500 МБ тянулись бы
+# с huggingface.co при КАЖДОМ старте машины (lifespan блокируется на загрузке
+# embedder → backend не отвечает на /health, пока качает). Запечённая модель =
+# детерминированный быстрый офлайн-старт. Строка модели обязана совпадать с
+# settings.EMBEDDING_MODEL по умолчанию — держать в синхроне при смене модели.
+ARG EMBEDDING_MODEL="sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
 
 EXPOSE 8765
 

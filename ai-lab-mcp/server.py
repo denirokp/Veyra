@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import functools
+import hmac
 import logging
 import os
 import time
@@ -27,8 +28,6 @@ from collections import defaultdict
 
 import httpx
 from mcp.server.fastmcp import FastMCP
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
 
 logger = logging.getLogger("ai-lab-mcp")
 
@@ -70,15 +69,36 @@ def _tracked(fn):
     return wrapper
 
 
-class BearerAuthMiddleware(BaseHTTPMiddleware):
-    """Требует `Authorization: Bearer <MCP_AUTH_TOKEN>` на всех запросах."""
+class BearerAuthASGI:
+    """Чистый ASGI-middleware: проверяет `Authorization: Bearer <MCP_AUTH_TOKEN>`
+    на каждом HTTP-запросе. В отличие от starlette BaseHTTPMiddleware НЕ
+    оборачивает response — поэтому не вмешивается в SSE-стрим streamable-HTTP
+    транспорта MCP (BaseHTTPMiddleware на стримах даёт тонкие баги). Сравнение
+    constant-time (hmac.compare_digest) — публичный эндпоинт, защита от
+    timing-перебора токена."""
 
-    async def dispatch(self, request, call_next):
-        auth = request.headers.get("authorization", "")
-        expected = f"Bearer {MCP_AUTH_TOKEN}"
-        if auth != expected:
-            return JSONResponse({"error": "unauthorized"}, status_code=401)
-        return await call_next(request)
+    def __init__(self, app, token: str):
+        self.app = app
+        self._expected = f"Bearer {token}".encode()
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        auth = b""
+        for name, value in scope.get("headers") or ():
+            if name == b"authorization":
+                auth = value
+                break
+        if not hmac.compare_digest(auth, self._expected):
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [(b"content-type", b"application/json")],
+            })
+            await send({"type": "http.response.body", "body": b'{"error":"unauthorized"}'})
+            return
+        await self.app(scope, receive, send)
 
 
 def _headers() -> dict:
@@ -188,8 +208,9 @@ async def health() -> dict:
 if __name__ == "__main__":
     if MCP_AUTH_TOKEN:
         import uvicorn
-        app = mcp.streamable_http_app()
-        app.add_middleware(BearerAuthMiddleware)
+        # Оборачиваем ASGI-приложение MCP чистым ASGI-middleware (не
+        # BaseHTTPMiddleware) — auth поверх streamable-HTTP без риска для стрима.
+        app = BearerAuthASGI(mcp.streamable_http_app(), MCP_AUTH_TOKEN)
         uvicorn.run(app, host=HOST, port=PORT)
     else:
         # Dev-режим без auth — для локальной разработки.

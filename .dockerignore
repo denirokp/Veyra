@@ -1,0 +1,26 @@
+# Build-контекст для корневого Dockerfile (backend + MCP).
+# Корпус и БД едут на fly volume, а НЕ в образ — не тащим их в контекст.
+.git/
+.gitignore
+
+# Данные/корпус (sqlite + chroma + docs) — только на volume.
+data/
+backend/data/
+**/*.db
+**/*.db-journal
+
+# Фронт в этот образ не входит (наружу торчит только MCP).
+frontend/
+**/node_modules/
+
+# Тяжёлые артефакты рассылки и слайды — не нужны рантайму.
+**/*.zip
+docs/slides/
+
+# Python-мусор и локальные окружения.
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.venv/
+**/.env
+.hf_cache/

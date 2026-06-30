@@ -80,10 +80,13 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 
 ## Коллеги подключаются (в Claude.ai)
 
+> URL — `https://<app>.fly.dev/mcp`, где `<app>` = имя приложения из `fly.toml`.
+> Назвал приложение `veyra` → URL `https://veyra.fly.dev/mcp`.
+
 Settings → Connectors → Add custom connector:
 
 - **Name:** `ai-lab`
-- **Remote MCP server URL:** `https://ai-lab.fly.dev/mcp`
+- **Remote MCP server URL:** `https://<app>.fly.dev/mcp`
 - **Advanced settings → Authorization header:** `Bearer <TOKEN>`
 
 После Add → в чате: `Вызови ai-lab corpus_stats`.
