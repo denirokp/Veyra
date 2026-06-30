@@ -4,7 +4,7 @@
 # отсюда — если оно не совпадает, деплой уедет не в то приложение. Менял имя на
 # `veyra` в UI → поставь здесь `veyra`. Публичный URL будет https://<app>.fly.dev/mcp.
 
-app = "ai-lab"
+app = "veyra"
 primary_region = "ams"  # Амстердам — близко к РФ и к Anthropic.
 
 [build]
