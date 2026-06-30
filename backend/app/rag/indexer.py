@@ -13,7 +13,7 @@ from app.storage.sql_db import save_chunks
 from app.settings import settings as _settings
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html", ".xlsx"}
 
 
 def _strip_html(raw: str) -> str:
@@ -80,6 +80,28 @@ def _parse_docx(file_path):
     return "\n\n".join(blocks)
 
 
+def _parse_xlsx(file_path):
+    """Table-aware .xlsx через openpyxl. Каждый лист → заголовок (## имя)
+    + строки в Markdown-таблице (тот же рендер, что и .docx-таблицы), чтобы
+    числовой детектор видел привязку метрика->значение.
+
+    data_only=True берёт ВЫЧИСЛЕННЫЕ значения формул (кэш, сохранённый Excel),
+    а не сам текст формулы — иначе в корпус попадёт `=SUM(...)` вместо числа.
+    read_only — стримим большие книги (роадмапы на мегабайты) без загрузки в RAM.
+    """
+    import openpyxl
+    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    blocks = []
+    try:
+        for ws in wb.worksheets:
+            rendered = _render_table_rows(ws.iter_rows(values_only=True))
+            if rendered:
+                blocks.append(f"## {ws.title}\n\n{rendered}")
+    finally:
+        wb.close()
+    return "\n\n".join(blocks)
+
+
 def parse_text(file_path: Path) -> str:
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
@@ -89,6 +111,8 @@ def parse_text(file_path: Path) -> str:
         return "\n\n".join(pages)
     if suffix == ".docx":
         return _parse_docx(file_path)
+    if suffix == ".xlsx":
+        return _parse_xlsx(file_path)
     if suffix in (".md", ".txt"):
         return file_path.read_text(encoding="utf-8", errors="replace")
     if suffix == ".html":
