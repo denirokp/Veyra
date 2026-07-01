@@ -57,6 +57,13 @@ async def docs_stats(db: AsyncSession = Depends(get_session)):
         )
     ).scalar()
 
+    # Свежесть корпуса: когда последний документ был проиндексирован. Нужно
+    # навыку для «контракта охвата» — предвычисленные таблицы find_* отражают
+    # состояние корпуса на этот момент, а не «сейчас».
+    last_indexed = (
+        await db.execute(select(func.max(Document.indexed_at)))
+    ).scalar()
+
     payload = {
         "total_documents": total,
         "by_status": by_status,
@@ -64,6 +71,7 @@ async def docs_stats(db: AsyncSession = Depends(get_session)):
         "open_contradictions": open_numeric,
         "open_logic_signals": open_logic,
         "open_promises": open_promises,
+        "last_indexed_at": last_indexed.isoformat() if last_indexed else None,
     }
     _stats_cache["data"] = payload
     _stats_cache["expires_at"] = now + _STATS_TTL
