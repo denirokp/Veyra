@@ -5,12 +5,17 @@
 
 ## 1. Инструменты — MCP-сервер
 
-В `~/.codex/config.toml` (глобально) или `.codex/config.toml` (в проекте):
+Добавь блок в `config.toml`:
 
 ```toml
 [mcp_servers.ai-lab]
 url = "https://veyra.fly.dev/mcp"
 ```
+
+- **Приложение Codex (десктоп/IDE):** ⚙️ → **MCP settings** → **Open config.toml**,
+  допиши блок, сохрани, перезапусти Codex.
+- **Codex CLI:** файл `~/.codex/config.toml` (глобально) или `.codex/config.toml`
+  (в проекте).
 
 Codex нативно поддерживает remote streamable-HTTP MCP по URL. Сервер
 открытый — токен не нужен. Если позже включат `MCP_AUTH_TOKEN` — добавь

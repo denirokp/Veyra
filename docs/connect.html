@@ -50,7 +50,8 @@
   table{width:100%;border-collapse:collapse;font-size:14.5px}
   td{border-top:1px solid var(--line);padding:9px 6px;vertical-align:top;color:var(--mut)}
   td:first-child{color:var(--txt);font-weight:600;white-space:nowrap;padding-right:16px}
-  ul{margin:6px 0 0;padding-left:20px;color:var(--mut)}
+  ul,ol{margin:6px 0 0;padding-left:20px;color:var(--mut)}
+  ol li{margin:3px 0}
   .uc-h{font-size:17px;font-weight:700;margin:0 0 4px}
   .card p.mut{color:var(--mut);margin:0 0 8px}
   a{color:var(--acc)}
@@ -169,28 +170,37 @@
 
   <!-- ============ CODEX ============ -->
   <section id="codex" class="panel">
-    <div class="note">Нужно: установленный и залогиненный <b>Codex CLI</b> (<code>codex --version</code>),
-       локальный репозиторий Veyra (для AGENTS.md). Если api.openai.com недоступен — VPN.</div>
+    <div class="note warn"><b>Это для тех, у кого установлено приложение Codex</b> (отдельная программа OpenAI).
+       Пользуешься только Claude.ai? Тебе нужна вкладка <b>«Claude.ai&nbsp;— подключение»</b>, а не эта.</div>
+
+    <div class="note">Как и в Claude.ai, два шага: <b>подключить данные</b> (сервер ai-lab) и <b>дать правила</b>
+       (файл AGENTS.md — у Codex нет «скиллов», как у Claude). Всё делается в самом приложении, терминал не нужен.</div>
 
     <div class="card"><div class="step">
       <div class="num">1</div>
       <div class="body">
-        <h3>Инструменты — MCP-сервер</h3>
-        <p>Добавить сервер в <span class="pill">~/.codex/config.toml</span>:</p>
-        <div class="code"><button class="copy">Копировать</button><pre>mkdir -p ~/.codex
-printf '\n[mcp_servers.ai-lab]\nurl = "https://veyra.fly.dev/mcp"\n' >> ~/.codex/config.toml</pre></div>
-        <div class="note">Сервер открытый — токен не нужен. Codex нативно поддерживает remote HTTP MCP по URL.</div>
+        <h3>Подключить данные (сервер ai-lab)</h3>
+        <ol>
+          <li>Открой приложение <b>Codex</b>.</li>
+          <li>Настройки: значок <b>шестерёнки</b>&nbsp;⚙️ → <b>MCP settings</b> → <b>Open config.toml</b>.
+              Откроется текстовый файл настроек.</li>
+          <li>Допиши в конец файла эти две строки и <b>сохрани</b>:</li>
+        </ol>
+        <div class="code"><button class="copy">Копировать</button><pre>[mcp_servers.ai-lab]
+url = "https://veyra.fly.dev/mcp"</pre></div>
+        <div class="note">Это подключает данные AI Lab. Сервер открытый — пароль/токен не нужен, больше ничего не заполняем.</div>
       </div>
     </div></div>
 
     <div class="card"><div class="step">
       <div class="num">2</div>
       <div class="body">
-        <h3>Правила — AGENTS.md</h3>
-        <p>У Codex нет «skills», поэтому правила идут через AGENTS.md (глобально):</p>
-        <div class="code"><button class="copy">Копировать</button><pre>cp ~/Code/Veyra/ai-lab/AGENTS.md ~/.codex/AGENTS.md</pre></div>
-        <div class="note">Правила условные («когда просят проверить инициативу / расхождения…») — обычному кодингу не мешают.
-           Хочешь изоляцию — положи AGENTS.md в отдельную папку и работай из неё.</div>
+        <h3>Дать правила (файл AGENTS.md)</h3>
+        <p class="mut">Этот файл говорит Codex, как пользоваться данными: всегда давать источник, не выдумывать,
+           показывать охват. Возьми <span class="pill">ai-lab/AGENTS.md</span> (пришлёт Денис) и положи его
+           <b>в папку проекта, который открываешь в Codex</b> — правила подхватятся из этой папки.</p>
+        <div class="note">Хочешь, чтобы правила работали в любом проекте — положи тот же файл как
+           <code>~/.codex/AGENTS.md</code> (та же папка настроек Codex, где и <code>config.toml</code> из шага&nbsp;1).</div>
       </div>
     </div></div>
 
@@ -198,18 +208,18 @@ printf '\n[mcp_servers.ai-lab]\nurl = "https://veyra.fly.dev/mcp"\n' >> ~/.codex
       <div class="num">3</div>
       <div class="body">
         <h3>Проверить</h3>
-        <div class="code"><button class="copy">Копировать</button><pre>codex
-# в сессии:
-вызови ai-lab corpus_stats</pre></div>
-        <p>Ожидаемо: число документов (<b>128</b>) и <code>last_indexed_at</code>.</p>
+        <p class="mut"><b>Перезапусти</b> Codex (чтобы он увидел новый сервер) и в чате напиши обычными словами:</p>
+        <div class="code"><button class="copy">Копировать</button><pre>вызови ai-lab corpus_stats</pre></div>
+        <p class="mut">Ответит числом документов (<b>128</b>) и датой обновления — значит подключилось.
+           Дальше спрашивай как на вкладке <b>«Как пользоваться»</b>.</p>
       </div>
     </div></div>
 
     <h2 class="sec">Если что-то не так</h2>
     <div class="card"><table>
-      <tr><td>Codex не видит инструменты</td><td>Проверь синтаксис <code>~/.codex/config.toml</code>, перезапусти <code>codex</code>. Список серверов — командой <code>/mcp</code> в сессии.</td></tr>
-      <tr><td>Ошибка про <code>url</code></td><td>Обнови Codex CLI — remote HTTP MCP по URL это свежая возможность.</td></tr>
-      <tr><td>401 / 403</td><td>Сервер открытый, токен не нужен. Если включён MCP_AUTH_TOKEN — добавь <code>bearer_token_env_var</code>.</td></tr>
+      <tr><td>Codex «не видит» ai-lab</td><td>Проверь, что строки из шага&nbsp;1 сохранились (⚙️ → MCP settings → Open config.toml), и <b>перезапусти</b> Codex. Список подключённого — команда <code>/mcp</code> в чате.</td></tr>
+      <tr><td>Ошибка про <code>url</code> / «not supported»</td><td>Обнови приложение Codex до свежей версии — подключение сервера по ссылке (URL) появилось недавно.</td></tr>
+      <tr><td>Отвечает «не по правилам»</td><td>Проверь, что <code>AGENTS.md</code> из шага&nbsp;2 лежит в папке открытого проекта (или как <code>~/.codex/AGENTS.md</code>).</td></tr>
     </table></div>
   </section>
 
