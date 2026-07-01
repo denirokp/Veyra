@@ -36,25 +36,35 @@ def filter_rows_by_query(
     rows: list[dict],
     query: str | None,
     text_of: Callable[[dict], str],
+    relevant_doc_ids: set[str] | None = None,
+    doc_ids_of: Callable[[dict], tuple[str, ...]] | None = None,
 ) -> list[dict]:
     """Отобрать строки find_*, релевантные теме `query`.
 
-    query пустой/None → вернуть строки как есть. Иначе: строка проходит, если
-    в её тексте (`text_of(row)`) встречается хотя бы один токен запроса
-    (подстрокой, ≥3 символов, без стоп-слов); результат отсортирован по числу
-    совпавших уникальных токенов (по убыванию).
+    query пустой/None → вернуть строки как есть. Иначе строка проходит по
+    ЛЮБОМУ из двух сигналов:
+      1) токен-матч — токен запроса (≥3 симв., без стоп-слов) встречается
+         подстрокой в тексте строки (`text_of`);
+      2) семантика — документ строки попал в `relevant_doc_ids` (их отдаёт
+         ретривер по эмбеддингам, `doc_ids_of` достаёт id доков из строки).
+    Второй сигнал ловит синонимы («выручка» → строки с «GMV / оборот»),
+    которых буквальный токен-матч не находит. Ранжируем: токен-хиты вперёд,
+    семантическое совпадение добавляет полбалла.
     """
     if not query or not query.strip():
         return rows
     terms = set(_tokens(query))
-    if not terms:
+    rel = relevant_doc_ids or set()
+    if not terms and not rel:
         return rows
 
-    scored: list[tuple[int, int, dict]] = []
+    scored: list[tuple[float, int, dict]] = []
     for i, row in enumerate(rows):
         hay = (text_of(row) or "").lower()
         hits = sum(1 for t in terms if t in hay)
-        if hits:
-            scored.append((hits, -i, row))  # -i: стабильный порядок при равенстве
+        docmatch = bool(rel and doc_ids_of and any(d in rel for d in doc_ids_of(row)))
+        if hits or docmatch:
+            score = hits + (0.5 if docmatch else 0.0)
+            scored.append((score, -i, row))  # -i: стабильный порядок при равенстве
     scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
     return [row for _, _, row in scored]

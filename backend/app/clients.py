@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _llm_client: openai.AsyncOpenAI | None = None
 _embedder = None  # SentenceTransformer, lazy-loaded
+_reranker = None  # CrossEncoder, lazy-loaded (только если ENABLE_RERANKER)
 
 # Глобальный лимит одновременных LLM-вызовов. Moonshot не штатно отдаёт 429,
 # но без лимита find_logic_signals может пустить 5-10 параллельных запросов
@@ -104,6 +105,32 @@ async def embed(texts: list[str]) -> list[list[float]]:
 async def embed_one(text: str) -> list[float]:
     results = await embed([text])
     return results[0]
+
+
+def get_reranker():
+    """Лениво инициализирует cross-encoder (только при ENABLE_RERANKER).
+    Грузит вторую модель (~500МБ) — вызывается лишь из reranked-пути."""
+    global _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+        logger.info("Загружаю reranker: %s", settings.RERANKER_MODEL)
+        _reranker = CrossEncoder(settings.RERANKER_MODEL, device="cpu")
+    return _reranker
+
+
+async def rerank(query: str, passages: list[str]) -> list[int]:
+    """Индексы passages по убыванию релевантности запросу (cross-encoder).
+    encode гоняем в отдельном thread'е, чтобы не блокировать loop."""
+    if not passages:
+        return []
+
+    def _score() -> list[float]:
+        model = get_reranker()
+        scores = model.predict([(query, p) for p in passages])
+        return [float(s) for s in scores]
+
+    scores = await asyncio.to_thread(_score)
+    return sorted(range(len(passages)), key=lambda i: scores[i], reverse=True)
 
 
 def fast_model() -> str:

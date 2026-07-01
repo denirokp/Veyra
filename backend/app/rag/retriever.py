@@ -1,12 +1,16 @@
 """Hybrid retrieval — vector + BM25 + RRF fusion + hierarchy weighting."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from rank_bm25 import BM25Okapi
 
 from app.clients import embed_one
+from app.settings import settings
 from app.storage import vector_db
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -218,6 +222,17 @@ async def retrieve(
     # Дедуп overlapping чанков (соседи по индексу часто пересекаются)
     deduped = _dedupe_overlapping(boosted)
 
+    # Реранк (cross-encoder) поверх fused-пула — только если включён
+    # (грузит вторую модель ~500МБ). Реранкаем верхушку пула, хвост оставляем.
+    if settings.ENABLE_RERANKER and deduped:
+        from app.clients import rerank as _rerank
+        pool = deduped[: max(30, top_k * 2)]
+        try:
+            order = await _rerank(query, [c.content for c in pool])
+            deduped = [pool[i] for i in order] + deduped[len(pool):]
+        except Exception:  # noqa: BLE001 — fallback на fused-порядок, не роняем запрос
+            logger.warning("rerank failed, fallback to fused order", exc_info=True)
+
     # Diversity по документам — гарантируем что каждый документ в базе
     # представлен в результатах, иначе одиночные "жирные" доки забивают топ.
     return _interleave_by_document(deduped, top_k)
@@ -231,3 +246,18 @@ async def retrieve_for_writing(
     """Для написания документов — только actual, без архива."""
     chunks = await retrieve(topic, top_k=top_k, include_archive=False, workspace=workspace)
     return [c for c in chunks if c.status == "actual"]
+
+
+async def relevant_document_ids(
+    query: str,
+    top_k: int = 25,
+    workspace: str = "default",
+) -> set[str]:
+    """Множество document_id, чьи чанки ретривер счёл релевантными теме.
+    Используется для семантической фильтрации find_* (эндпоинты
+    расхождений/обещаний) — ловит синонимы, которых буквальный токен-матч
+    по строкам таблицы не находит."""
+    if not query or not query.strip():
+        return set()
+    chunks = await retrieve(query, top_k=top_k, workspace=workspace)
+    return {c.document_id for c in chunks if c.document_id}

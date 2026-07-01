@@ -15,6 +15,10 @@ from app.settings import settings as _settings
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html", ".xlsx"}
 
+# Кап строк на лист xlsx — гигантские дампы (трекшены на тысячи строк) иначе
+# взрывают корпус тысячами чанков-стен-из-цифр и топят нарративные доки.
+_MAX_XLSX_ROWS_PER_SHEET = 300
+
 
 def _strip_html(raw: str) -> str:
     """Минимальная очистка HTML — теги удаляем, &amp; и т.п. раскодируем.
@@ -94,12 +98,34 @@ def _parse_xlsx(file_path):
     blocks = []
     try:
         for ws in wb.worksheets:
-            rendered = _render_table_rows(ws.iter_rows(values_only=True))
+            rows = []
+            truncated = False
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i >= _MAX_XLSX_ROWS_PER_SHEET:
+                    truncated = True
+                    break
+                rows.append(row)
+            rendered = _render_table_rows(rows)
             if rendered:
+                if truncated:
+                    rendered += f"\n\n_[лист усечён до {_MAX_XLSX_ROWS_PER_SHEET} строк]_"
                 blocks.append(f"## {ws.title}\n\n{rendered}")
     finally:
         wb.close()
     return "\n\n".join(blocks)
+
+
+def _looks_like_garbage(text: str) -> bool:
+    """Эвристика «бинарь/мусор»: на длинном тексте мало букв среди
+    непробельных символов. Скан-PDF без OCR и битые конвертации `.doc` дают
+    простыни спецсимволов/цифр без слов (модель их видит как «encoded
+    binary»). Короткие тексты не режем — там низкая доля букв нормальна."""
+    sample = text[:200_000]
+    non_space = sum(1 for ch in sample if not ch.isspace())
+    if non_space < 800:
+        return False
+    letters = sum(1 for ch in sample if ch.isalpha())
+    return letters / non_space < 0.35
 
 
 def parse_text(file_path: Path) -> str:
@@ -149,6 +175,16 @@ async def index_document(
 
     text = parse_text(file_path)
     _log.info("index doc=%s parse %.2fs, %d chars", document_id, _time.monotonic() - _t0, len(text))
+
+    # Guard от мусора: битые конвертации / скан-PDF без OCR парсятся в
+    # «бинарь» без слов — не индексируем, чтобы не засорять корпус и не жечь
+    # токены на бесполезном тексте (в этот раз чистили такое руками).
+    if _looks_like_garbage(text):
+        _log.warning(
+            "index doc=%s: похоже на мусор/бинарь (доля букв низкая, %d симв.) — пропуск",
+            document_id, len(text),
+        )
+        return 0
 
     # Кэшируем полный текст в БД — для full-mode чата без RAG-потерь.
     from app.storage.sql_db import update_document as _update_document

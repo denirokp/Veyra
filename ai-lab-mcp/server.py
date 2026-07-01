@@ -119,6 +119,18 @@ async def _get(path: str, params: dict | None = None):
         return {"error": f"backend GET {path} failed: {exc}"}
 
 
+async def _patch(path: str, json: dict | None = None, params: dict | None = None):
+    """PATCH к движку (пометка находки). Ошибки не роняют — {"error": ...}."""
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            r = await client.patch(
+                f"{BACKEND_URL}{path}", json=json, params=params, headers=_headers())
+            r.raise_for_status()
+            return r.json()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"backend PATCH {path} failed: {exc}"}
+
+
 @mcp.tool()
 @_tracked
 async def search_corpus(query: str, top_k: int = 10, workspace: str = "default") -> dict:
@@ -136,46 +148,84 @@ async def search_corpus(query: str, top_k: int = 10, workspace: str = "default")
 
 @mcp.tool()
 @_tracked
-async def find_numeric_contradictions(query: str = "") -> dict:
+async def find_numeric_contradictions(query: str = "", status: str = "") -> dict:
     """Предвычисленные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с
     разными значениями (между документами и внутри документа).
     Готовая таблица, без LLM-вызова. Каждая запись несёт severity:
-    critical | medium | low — критичность по величине отрыва значений.
+    critical | medium | low, поле status (open|resolved|dismissed) и
+    created_at — когда находка появилась.
 
     query — тема для фильтрации на сервере (напр. "GMV" или "churn
-    продавцов"). Вернутся только релевантные строки, отсортированные по
-    совпадению. Пусто → вся таблица. На тематическом вопросе задавай query,
-    не тяни всю таблицу и не фильтруй её вручную.
+    продавцов"): вернутся только релевантные строки (ловит и синонимы). Пусто
+    → вся таблица. status — фильтр состояния (напр. "open" — только
+    неразобранные). На тематическом вопросе задавай query, не тяни всю
+    таблицу и не фильтруй её вручную.
     """
-    params = {"query": query} if query else None
+    params = {k: v for k, v in (("query", query), ("status", status)) if v} or None
     return {"numeric_contradictions": await _get("/api/contradictions/numeric", params)}
 
 
 @mcp.tool()
 @_tracked
-async def find_logic_contradictions(query: str = "") -> dict:
+async def find_logic_contradictions(query: str = "", status: str = "") -> dict:
     """Предвычисленные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
-    смыслу утверждения. Готовая таблица, без LLM-вызова. Каждая запись
-    несёт severity: critical | medium | low | unknown.
+    смыслу утверждения. Готовая таблица, без LLM-вызова. Каждая запись несёт
+    severity: critical | medium | low | unknown, status (open|reviewed|
+    dismissed) и created_at.
 
-    query — тема для фильтрации на сервере; вернутся только релевантные
-    строки. Пусто → вся таблица.
+    query — тема для фильтрации на сервере (ловит синонимы). status — фильтр
+    состояния. Пусто → вся таблица.
     """
-    params = {"query": query} if query else None
+    params = {k: v for k, v in (("query", query), ("status", status)) if v} or None
     return {"logic_contradictions": await _get("/api/contradictions/logic", params)}
 
 
 @mcp.tool()
 @_tracked
-async def find_open_promises(query: str = "") -> dict:
-    """Предвычисленные незакрытые обещания (open / overdue) — что
-    обещали в документах и не отметили выполненным. Готовая таблица.
+async def find_open_promises(query: str = "", status: str = "") -> dict:
+    """Предвычисленные обещания — что обещали в документах. Готовая таблица;
+    каждая запись несёт status (open|fulfilled|overdue|no_data) и created_at.
 
-    query — тема для фильтрации на сервере; вернутся только релевантные
-    обещания. Пусто → вся таблица.
+    query — тема для фильтрации на сервере (ловит синонимы). status — фильтр
+    состояния (по умолчанию — все; "open" — только незакрытые). Пусто → вся
+    таблица.
     """
-    params = {"query": query} if query else None
+    params = {k: v for k, v in (("query", query), ("status", status)) if v} or None
     return {"promises": await _get("/api/promises", params)}
+
+
+@mcp.tool()
+@_tracked
+async def mark_finding(kind: str, finding_id: str, status: str, note: str = "") -> dict:
+    """Пометить находку — состояние ПЕРЕЖИВАЕТ сессии (межсессионная память).
+    Так «уже разобрали / приняли / закрыли» не всплывает каждый раз заново, а
+    в следующий прогон видно, что new, что acknowledged, что resolved.
+
+    kind: "numeric" | "logic" | "promise" (из какой таблицы находка).
+    finding_id: поле `id` строки из соответствующего find_*.
+    status:
+      numeric → open | resolved | dismissed
+      logic   → open | reviewed | dismissed
+      promise → open | fulfilled | overdue | no_data
+    note: комментарий (кто/почему пометил) — сохраняется к находке.
+
+    Помечай только по явному согласию пользователя, не сам по себе.
+    """
+    kind = (kind or "").lower().strip()
+    if kind == "numeric":
+        return await _patch(f"/api/contradictions/numeric/{finding_id}",
+                            json={"status": status})
+    if kind == "logic":
+        p = {"status": status}
+        if note:
+            p["review_notes"] = note
+        return await _patch(f"/api/contradictions/logic/{finding_id}", params=p)
+    if kind == "promise":
+        body = {"status": status}
+        if note:
+            body["notes"] = note
+        return await _patch(f"/api/promises/{finding_id}", json=body)
+    return {"error": f"kind должен быть numeric|logic|promise, получено {kind!r}"}
 
 
 @mcp.tool()

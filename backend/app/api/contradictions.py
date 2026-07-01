@@ -15,6 +15,19 @@ from app.storage.sql_db import (
 router = APIRouter(tags=["contradictions"])
 
 
+async def _relevant_docs(query: str | None) -> set[str] | None:
+    """Семантически релевантные doc_id по теме — для фильтра find_* (ловит
+    синонимы). None, если query пуст ИЛИ ретривер недоступен: тогда фильтр
+    работает только по токен-матчу и не роняет запрос."""
+    if not query or not query.strip():
+        return None
+    try:
+        from app.rag.retriever import relevant_document_ids
+        return await relevant_document_ids(query)
+    except Exception:  # noqa: BLE001 — деградируем до токен-матча, не 500
+        return None
+
+
 # ── Numeric contradictions ────────────────────────────────────────────────────
 
 @router.get("/contradictions/numeric")
@@ -51,10 +64,15 @@ async def get_numeric_contradictions(
             "severity": c.severity,
             "created_at": c.created_at,
         })
-    return filter_rows_by_query(result, query, lambda r: " ".join(str(x) for x in (
-        r["metric"], r["period"], r["value_a"], r["value_b"],
-        r["document_a"]["title"], r["document_b"]["title"],
-    )))
+    rel = await _relevant_docs(query)
+    return filter_rows_by_query(
+        result, query,
+        lambda r: " ".join(str(x) for x in (
+            r["metric"], r["period"], r["value_a"], r["value_b"],
+            r["document_a"]["title"], r["document_b"]["title"])),
+        relevant_doc_ids=rel,
+        doc_ids_of=lambda r: (r["document_a"]["id"], r["document_b"]["id"]),
+    )
 
 
 @router.patch("/contradictions/numeric/{contradiction_id}")
@@ -142,10 +160,15 @@ async def get_logic_signals(
             "review_notes": s.review_notes,
             "created_at": s.created_at,
         })
-    return filter_rows_by_query(result, query, lambda r: " ".join(str(x) for x in (
-        r["signal_type"], r["statement_a"], r["statement_b"],
-        r["document_a"]["title"], r["document_b"]["title"],
-    )))
+    rel = await _relevant_docs(query)
+    return filter_rows_by_query(
+        result, query,
+        lambda r: " ".join(str(x) for x in (
+            r["signal_type"], r["statement_a"], r["statement_b"],
+            r["document_a"]["title"], r["document_b"]["title"])),
+        relevant_doc_ids=rel,
+        doc_ids_of=lambda r: (r["document_a"]["id"], r["document_b"]["id"]),
+    )
 
 
 @router.patch("/contradictions/logic/{signal_id}")

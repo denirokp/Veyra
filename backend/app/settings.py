@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     # Первый запуск скачивает ~500МБ в ~/.cache/huggingface.
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 
+    # Reranker (cross-encoder) поверх hybrid-retrieval. Поднимает точность
+    # выдачи, НО грузит вторую модель (~500МБ RAM) — на 2GB Fly-инстансе рискует
+    # OOM, поэтому по умолчанию ВЫКЛЮЧЕН. Включай (ENABLE_RERANKER=1) на машине
+    # с запасом RAM. Модель ленивая: без флага не грузится и память не ест.
+    ENABLE_RERANKER: bool = False
+    RERANKER_MODEL: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+
     # Storage
     CHROMA_PERSIST_DIR: str = "./data/chroma"
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/khronika.db"
