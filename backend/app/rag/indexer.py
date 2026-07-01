@@ -116,16 +116,32 @@ def _parse_xlsx(file_path):
 
 
 def _looks_like_garbage(text: str) -> bool:
-    """Эвристика «бинарь/мусор»: на длинном тексте мало букв среди
-    непробельных символов. Скан-PDF без OCR и битые конвертации `.doc` дают
-    простыни спецсимволов/цифр без слов (модель их видит как «encoded
-    binary»). Короткие тексты не режем — там низкая доля букв нормальна."""
+    """Эвристика «бинарь/мусор» — три сигнала, любой срабатывает:
+      1) MIME/MHTML-экспорт: сохранённая веб-страница вместо документа
+         (Confluence «Exported From…», multipart, base64-вложения);
+      2) мало букв среди непробельных символов (hex/quoted-printable);
+      3) длинные неразрывные блоки без пробелов (base64 — у него высокая
+         доля букв, поэтому сигнал №2 его НЕ ловит).
+    Короткие тексты и обычные таблицы (короткие токены + пробелы) не режем."""
+    import re as _re
+
     sample = text[:200_000]
     non_space = sum(1 for ch in sample if not ch.isspace())
     if non_space < 800:
         return False
+
+    head = text[:3000]
+    if ("MIME-Version:" in head or "Content-Transfer-Encoding" in head
+            or "Exported From Confluence" in head or "multipart/related" in head):
+        return True
+
     letters = sum(1 for ch in sample if ch.isalpha())
-    return letters / non_space < 0.35
+    if letters / non_space < 0.35:
+        return True
+
+    # Доля текста в «словах» длиннее 80 символов (base64/битые блобы).
+    long_run = sum(len(m) for m in _re.findall(r"\S{80,}", sample))
+    return long_run / max(len(sample), 1) > 0.15
 
 
 def parse_text(file_path: Path) -> str:
