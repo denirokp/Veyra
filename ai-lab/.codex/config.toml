@@ -1,0 +1,12 @@
+# Codex project-scoped config для AI Lab.
+#
+# Открой ЭТУ папку (ai-lab/) в приложении Codex и разреши (Trust) проект —
+# сервер ai-lab подключится сам, без правки глобальных настроек.
+# Правила берутся из AGENTS.md в этой же папке — тоже автоматически.
+#
+# Сервер открытый (PoC): токен не нужен. Если позже включат MCP_AUTH_TOKEN —
+# добавь сюда строку:  bearer_token_env_var = "AILAB_TOKEN"
+# и положи токен в переменную окружения AILAB_TOKEN.
+
+[mcp_servers.ai-lab]
+url = "https://veyra.fly.dev/mcp"
