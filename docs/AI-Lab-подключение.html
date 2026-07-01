@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Lab — подключение</title>
+<style>
+  :root{--bg:#0f1216;--card:#171b21;--line:#262c35;--txt:#e8ecf1;--mut:#9aa4b2;--acc:#4f9cf9;--ok:#2f9e5f;--warn:#3a2f1a;--warnln:#6b5720}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:30px 20px 60px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--mut);margin:0 0 20px}
+  .note{background:#12171d;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;color:var(--mut);font-size:14.5px}
+  .note.warn{background:var(--warn);border-color:var(--warnln);color:#e7d9b0}
+  .note b{color:var(--txt)}
+  .choose{display:flex;gap:12px;margin:8px 0 4px;flex-wrap:wrap}
+  .choose button{flex:1;min-width:200px;background:var(--card);color:var(--txt);border:1.5px solid var(--line);border-radius:14px;padding:16px 14px;cursor:pointer;text-align:left;font-size:15px}
+  .choose button .t{font-size:17px;font-weight:700;display:block;margin-bottom:3px}
+  .choose button .d{color:var(--mut);font-size:13.5px}
+  .choose button.active{border-color:var(--acc);background:#16202c}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;margin:16px 0}
+  .step{display:flex;gap:14px}
+  .num{flex:0 0 34px;height:34px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .body{flex:1;min-width:0}
+  h3{margin:2px 0 8px;font-size:18px}
+  .tag{display:inline-block;font-size:12px;font-weight:600;color:#cbb98a;border:1px solid #5b4d29;border-radius:20px;padding:1px 9px;margin-left:8px;vertical-align:middle}
+  ol{margin:6px 0 0;padding-left:22px}ol li{margin:5px 0}
+  .pill{background:#0c0f13;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px}
+  code{background:#0c0f13;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px}
+  .code{position:relative;background:#0b0e12;border:1px solid var(--line);border-radius:10px;margin:10px 0}
+  .code pre{margin:0;padding:14px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;color:#dce6f2;white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;background:#1b222b;color:var(--mut);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font-size:12.5px;cursor:pointer}
+  .copy:hover{color:var(--txt)}.copy.ok{color:#fff;background:var(--ok);border-color:var(--ok)}
+  h2.sec{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:26px 0 8px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  td{border-top:1px solid var(--line);padding:10px 8px;vertical-align:top;color:var(--mut)}
+  td:first-child{color:var(--txt);font-weight:600;white-space:nowrap;padding-right:14px}
+  .path{display:none}.path.active{display:block}
+  .foot{color:var(--mut);font-size:13px;margin-top:30px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI Lab — подключение</h1>
+  <p class="sub">Помощник, который находит в наших документах противоречия, незакрытые обещания и пробелы —
+     с цитатой и ссылкой на источник. Настройка один раз, ~3 минуты.</p>
+
+  <div class="note"><b>С чего начать:</b> нажми, чем ты пользуешься. Покажем только твои шаги.</div>
+  <div class="choose">
+    <button id="b-claude" class="active" onclick="pick('claude')">
+      <span class="t">🟣 Я через Claude.ai</span>
+      <span class="d">Обычный вариант для большинства. Нужна платная подписка Claude.</span>
+    </button>
+    <button id="b-codex" onclick="pick('codex')">
+      <span class="t">🟢 Я через Codex</span>
+      <span class="d">Для тех, кто работает в приложении Codex (OpenAI).</span>
+    </button>
+  </div>
+
+  <!-- ================= CLAUDE.AI ================= -->
+  <div id="p-claude" class="path active">
+    <div class="note warn">Нужны: <b>платная</b> подписка Claude (Pro/Team/Max) и файл
+       <b>ai-lab-skill.zip</b> (пришлёт Денис). Если Claude.ai у тебя открывается — VPN уже в порядке.</div>
+
+    <div class="card"><div class="step"><div class="num">1</div><div class="body">
+      <h3>Подключить данные</h3>
+      <ol>
+        <li>Claude.ai → <b>Settings</b> (⚙️) → <b>Connectors</b> → <b>Add custom connector</b>.</li>
+        <li>В поле <b>URL</b> вставь ссылку:</li>
+      </ol>
+      <div class="code"><button class="copy">Копировать</button><pre>https://veyra.fly.dev/mcp</pre></div>
+      <div class="note">Остальные поля (OAuth) оставь <b>пустыми</b> → <b>Add</b>. Токен/пароль не нужны.</div>
+    </div></div></div>
+
+    <div class="card"><div class="step"><div class="num">2</div><div class="body">
+      <h3>Загрузить скилл</h3>
+      <ol>
+        <li>Сохрани присланный файл <span class="pill">ai-lab-skill.zip</span> на компьютер.</li>
+        <li>Claude.ai → <b>Settings</b> → <b>Skills</b> → <b>Upload skill</b> → выбери этот файл.</li>
+        <li>В списке появится <span class="pill">ai-lab</span> — включи его.</li>
+      </ol>
+      <div class="note">Скилл — это «правила», по которым Claude пользуется данными (всегда даёт источник,
+         не выдумывает). Без него тоже работает, но хуже.</div>
+    </div></div></div>
+
+    <div class="card"><div class="step"><div class="num">3</div><div class="body">
+      <h3>Спросить</h3>
+      <p style="margin:2px 0 0">В новом чате проверь, что коннектор <span class="pill">ai-lab</span> включён
+         (значок инструментов у поля ввода), и пиши обычными словами:</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Что мы уже знаем про &lt;тема&gt;? Дай с источниками
+Проверь инициативу: &lt;текст&gt;
+Какие обещания по &lt;теме&gt; не закрыты?
+Нет ли противоречий по &lt;метрике&gt; между документами?</pre></div>
+    </div></div></div>
+
+    <h2 class="sec">Если не работает</h2>
+    <div class="card"><table>
+      <tr><td>Claude пишет «инструментов нет»</td><td>В чате <b>включи коннектор ai-lab</b> — галочка в панели инструментов у поля ввода.</td></tr>
+      <tr><td>Claude.ai не открывается</td><td>Включи <b>западный VPN</b>.</td></tr>
+      <tr><td>Нет «Add custom connector» или «Skills»</td><td>Нужна <b>платная</b> подписка Claude.</td></tr>
+    </table></div>
+  </div>
+
+  <!-- ================= CODEX ================= -->
+  <div id="p-codex" class="path">
+    <div class="note warn">Это для тех, у кого стоит приложение <b>Codex</b> и он в него вошёл.
+       Ставить/качать ничего не надо — сервер уже в облаке, нужно вписать одну ссылку.</div>
+
+    <div class="card"><div class="step"><div class="num">1</div><div class="body">
+      <h3>Подключить данные</h3>
+      <ol>
+        <li>В Codex: значок <b>⚙️</b> → <b>MCP settings</b> → <b>Open config.toml</b>.</li>
+        <li>Вставь в <b>конец</b> файла эти две строки и сохрани (<b>Ctrl+S</b> / <b>⌘S</b>):</li>
+      </ol>
+      <div class="code"><button class="copy">Копировать</button><pre>[mcp_servers.ai-lab]
+url = "https://veyra.fly.dev/mcp"</pre></div>
+      <div class="note">Обычный текстовый файл — сломать этим нельзя. Сервер открытый: токен/пароль не нужны.</div>
+    </div></div></div>
+
+    <div class="card"><div class="step"><div class="num">2</div><div class="body">
+      <h3>Добавить правила <span class="tag">по желанию</span></h3>
+      <p style="margin:2px 0 0">Файл <span class="pill">AGENTS.md</span> (пришлёт Денис) сохрани в <b>ту же папку</b>,
+         где открылся <code>config.toml</code> (то есть как <code>~/.codex/AGENTS.md</code>).</p>
+      <div class="note">Можно <b>пропустить</b> — заработает и без него, просто ответы будут «сырее».</div>
+    </div></div></div>
+
+    <div class="card"><div class="step"><div class="num">3</div><div class="body">
+      <h3>Перезапустить и проверить</h3>
+      <ol>
+        <li><b>Перезапусти</b> Codex.</li>
+        <li>В чате напиши:</li>
+      </ol>
+      <div class="code"><button class="copy">Копировать</button><pre>вызови ai-lab corpus_stats</pre></div>
+      <p style="margin:6px 0 0">Ответит <b>128 документов</b> и датой — всё работает. Дальше спрашивай обычными словами:</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Проверь инициативу: &lt;краткое описание&gt;
+Какие обещания по &lt;теме&gt; не закрыты?
+Нет ли противоречий по &lt;метрике&gt; между документами?</pre></div>
+    </div></div></div>
+
+    <h2 class="sec">Если не работает</h2>
+    <div class="card"><table>
+      <tr><td>Codex «не видит» ai-lab</td><td>Проверь, что две строки из шага&nbsp;1 сохранились (⚙️ → MCP settings → Open config.toml), и <b>перезапусти</b> Codex.</td></tr>
+      <tr><td>Ошибка про <code>url</code> / «not supported»</td><td>Обнови приложение Codex — подключение по ссылке появилось недавно.</td></tr>
+      <tr><td><code>corpus_stats</code> молчит</td><td>Если сам Codex отвечает в чате — сеть в порядке. Подожди минуту, повтори.</td></tr>
+    </table></div>
+  </div>
+
+  <p class="foot">AI Lab · сервер veyra.fly.dev/mcp · открытый PoC · вопросы → Денис</p>
+</div>
+
+<script>
+  function pick(k){
+    document.getElementById('b-claude').classList.toggle('active',k==='claude');
+    document.getElementById('b-codex').classList.toggle('active',k==='codex');
+    document.getElementById('p-claude').classList.toggle('active',k==='claude');
+    document.getElementById('p-codex').classList.toggle('active',k==='codex');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  document.querySelectorAll('.copy').forEach(btn=>{
+    btn.onclick=async()=>{
+      const pre=btn.parentElement.querySelector('pre');
+      try{ await navigator.clipboard.writeText(pre.textContent); }
+      catch(e){ const r=document.createRange(); r.selectNode(pre);
+        getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); getSelection().removeAllRanges(); }
+      const t=btn.textContent; btn.textContent='Скопировано ✓'; btn.classList.add('ok');
+      setTimeout(()=>{btn.textContent=t; btn.classList.remove('ok')},1400);
+    };
+  });
+</script>
+</body>
+</html>
