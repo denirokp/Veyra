@@ -178,8 +178,32 @@
       <div class="code"><button class="copy">Копировать</button><pre>Проверь инициативу: &lt;краткое описание&gt;
 Какие обещания по &lt;теме&gt; не закрыты?
 Нет ли противоречий по &lt;метрике&gt; между документами?</pre></div>
-      <div class="note">По желанию: файл <span class="pill">AGENTS.md</span> (пришлёт Денис), положенный в папку твоего проекта
-         в Codex, делает ответы аккуратнее (всегда источник, не выдумывает). Не обязательно.</div>
+    </div></div></div>
+
+    <div class="card"><div class="step"><div class="num">4</div><div class="body">
+      <h3>Правила <span class="tag">по желанию</span></h3>
+      <p style="margin:2px 0 0">Файл <span class="pill">AGENTS.md</span> (пришлёт Денис) — это «правила», как Codex
+         пользуется данными (то же, что скилл у Claude): всегда даёт источник, не выдумывает, показывает охват.
+         Codex читает его <b>сам</b>. Можно пропустить — AI Lab работает и без него, просто ответы будут «сырее».</p>
+      <p style="margin:12px 0 2px"><b>Проще всего — сделать правила общими для всех проектов:</b></p>
+      <ol>
+        <li>Открой <b>Finder</b> → нажми <b>⌘ + ⇧ + G</b> («Переход к папке»).</li>
+        <li>Впиши <span class="pill">~/.codex</span> и нажми Enter.</li>
+        <li>Перетащи в эту папку файл <b>AGENTS.md</b> (имя ровно такое, не переименовывать).</li>
+      </ol>
+      <svg class="shot" viewBox="0 0 620 132" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+        <rect width="620" height="132" rx="12" fill="#f2f3f5"/>
+        <rect x="30" y="24" width="560" height="84" rx="12" fill="#ffffff" stroke="#e0e2e6"/>
+        <text x="52" y="58" font-size="14" font-weight="600" fill="#1a1a1a">Переход к папке:</text>
+        <rect x="52" y="70" width="400" height="34" rx="8" fill="#ffffff" stroke="#2f6bff" stroke-width="1.5"/>
+        <text x="66" y="92" font-size="14" fill="#1a1a1a">~/.codex</text>
+        <rect x="470" y="70" width="98" height="34" rx="8" fill="#2f6bff"/>
+        <text x="519" y="92" font-size="13.5" font-weight="600" fill="#ffffff" text-anchor="middle">Перейти</text>
+      </svg>
+      <div class="cap">Finder → ⌘⇧G → впиши <b>~/.codex</b> → положи туда <b>AGENTS.md</b>.</div>
+      <div class="note">Только для одного проекта? Положи <code>AGENTS.md</code> в <b>папку этого проекта</b> (её видно
+         в Codex в разделе «Проекты»). <b>Проверка:</b> задай вопрос по корпусу — если в ответе идут цитаты и ссылки
+         на документы, правила подхватились. Codex перечитывает их в новом чате.</div>
     </div></div></div>
 
     <h2 class="sec">Если не работает</h2>
