@@ -37,6 +37,8 @@
   td{border-top:1px solid var(--line);padding:10px 8px;vertical-align:top;color:var(--mut)}
   td:first-child{color:var(--txt);font-weight:600;white-space:nowrap;padding-right:14px}
   .path{display:none}.path.active{display:block}
+  .shot{width:100%;height:auto;border:1px solid var(--line);border-radius:10px;margin:12px 0 2px;background:#fff;display:block}
+  .cap{color:var(--mut);font-size:12.5px;margin:4px 0 0}
   .foot{color:var(--mut);font-size:13px;margin-top:30px;text-align:center}
 </style>
 </head>
@@ -108,40 +110,82 @@
        Ставить/качать ничего не надо — сервер уже в облаке, нужно вписать одну ссылку.</div>
 
     <div class="card"><div class="step"><div class="num">1</div><div class="body">
-      <h3>Подключить данные</h3>
+      <h3>Открыть список серверов</h3>
       <ol>
-        <li>В Codex: значок <b>⚙️</b> → <b>MCP settings</b> → <b>Open config.toml</b>.</li>
-        <li>Вставь в <b>конец</b> файла эти две строки и сохрани (<b>Ctrl+S</b> / <b>⌘S</b>):</li>
+        <li>Внизу слева (где твоя почта) → <b>Настройки</b> (или <b>⌘,</b>).</li>
+        <li>В настройках слева, раздел «Интеграции» → <b>Серверы MCP</b>.</li>
+        <li>Нажми <b>+ Добавить сервер</b> <span style="color:#e5484d;font-weight:700">(1)</span>.</li>
       </ol>
-      <div class="code"><button class="copy">Копировать</button><pre>[mcp_servers.ai-lab]
-url = "https://veyra.fly.dev/mcp"</pre></div>
-      <div class="note">Обычный текстовый файл — сломать этим нельзя. Сервер открытый: токен/пароль не нужны.</div>
+      <svg class="shot" viewBox="0 0 620 170" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+        <rect width="620" height="170" rx="12" fill="#ffffff"/>
+        <text x="22" y="34" font-size="17" font-weight="700" fill="#1a1a1a">Серверы MCP</text>
+        <text x="22" y="53" font-size="11.5" fill="#8a8a8a">Подключайте внешние инструменты и источники данных</text>
+        <rect x="410" y="18" width="178" height="34" rx="9" fill="#eef3ff" stroke="#2f6bff" stroke-width="1.5"/>
+        <text x="499" y="40" font-size="13" font-weight="600" fill="#2f6bff" text-anchor="middle">+ Добавить сервер</text>
+        <circle cx="402" cy="20" r="13" fill="#e5484d"/>
+        <text x="402" y="25" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+        <rect x="22" y="74" width="566" height="80" rx="10" fill="#f6f7f9"/>
+        <text x="40" y="104" font-size="13.5" fill="#1a1a1a">avito</text>
+        <rect x="536" y="95" width="34" height="18" rx="9" fill="#2f6bff"/>
+        <circle cx="562" cy="104" r="7" fill="#ffffff"/>
+        <line x1="40" y1="124" x2="570" y2="124" stroke="#e6e8eb" stroke-width="1"/>
+        <text x="40" y="142" font-size="13.5" fill="#1a1a1a">mcp-hub</text>
+        <rect x="536" y="133" width="34" height="18" rx="9" fill="#2f6bff"/>
+        <circle cx="562" cy="142" r="7" fill="#ffffff"/>
+      </svg>
+      <div class="cap">Экран «Серверы MCP». Кнопка <b>«+ Добавить сервер»</b> — справа вверху (1).</div>
     </div></div></div>
 
     <div class="card"><div class="step"><div class="num">2</div><div class="body">
-      <h3>Добавить правила <span class="tag">по желанию</span></h3>
-      <p style="margin:2px 0 0">Файл <span class="pill">AGENTS.md</span> (пришлёт Денис) сохрани в <b>ту же папку</b>,
-         где открылся <code>config.toml</code> (то есть как <code>~/.codex/AGENTS.md</code>).</p>
-      <div class="note">Можно <b>пропустить</b> — заработает и без него, просто ответы будут «сырее».</div>
+      <h3>Заполнить форму</h3>
+      <ol>
+        <li><b>Имя:</b> впиши <span class="pill">ai-lab</span></li>
+        <li>Переключи тип с <b>STDIO</b> на <b>«Потоковая передача HTTP»</b> <span style="color:#e5484d;font-weight:700">(2)</span> — это важно, иначе не будет поля для ссылки.</li>
+        <li>В появившееся поле <b>URL</b> <span style="color:#e5484d;font-weight:700">(3)</span> вставь:</li>
+      </ol>
+      <div class="code"><button class="copy">Копировать</button><pre>https://veyra.fly.dev/mcp</pre></div>
+      <div class="note">Остальные поля не трогай → нажми <b>Сохранить</b>. Сервер открытый: токен/пароль не нужны.</div>
+      <svg class="shot" viewBox="0 0 620 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+        <rect width="620" height="300" rx="12" fill="#ffffff"/>
+        <text x="22" y="32" font-size="15" font-weight="700" fill="#1a1a1a">Подключиться к пользовательскому MCP</text>
+        <text x="22" y="66" font-size="12.5" font-weight="600" fill="#1a1a1a">Имя</text>
+        <rect x="22" y="74" width="566" height="34" rx="8" fill="#ffffff" stroke="#d9dce1"/>
+        <text x="36" y="96" font-size="13.5" fill="#1a1a1a">ai-lab</text>
+        <rect x="22" y="120" width="566" height="36" rx="9" fill="#eef0f3"/>
+        <rect x="26" y="124" width="278" height="28" rx="7" fill="#d7dade"/>
+        <text x="165" y="143" font-size="13" fill="#5a5f66" text-anchor="middle">STDIO</text>
+        <rect x="308" y="123" width="276" height="30" rx="7" fill="#eef3ff" stroke="#2f6bff" stroke-width="1.5"/>
+        <text x="446" y="143" font-size="12.5" font-weight="600" fill="#2f6bff" text-anchor="middle">Потоковая передача HTTP</text>
+        <circle cx="600" cy="138" r="13" fill="#e5484d"/>
+        <text x="600" y="143" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+        <text x="22" y="192" font-size="12.5" font-weight="600" fill="#1a1a1a">URL (адрес сервера)</text>
+        <rect x="22" y="200" width="566" height="34" rx="8" fill="#ffffff" stroke="#2f6bff" stroke-width="1.5"/>
+        <text x="36" y="222" font-size="13.5" fill="#1a1a1a">https://veyra.fly.dev/mcp</text>
+        <circle cx="600" cy="217" r="13" fill="#e5484d"/>
+        <text x="600" y="222" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+        <rect x="486" y="252" width="102" height="34" rx="9" fill="#2f6bff"/>
+        <text x="537" y="274" font-size="13.5" font-weight="600" fill="#ffffff" text-anchor="middle">Сохранить</text>
+      </svg>
+      <div class="cap">Форма нового сервера: имя <b>ai-lab</b>, тип <b>«Потоковая передача HTTP»</b> (2), поле <b>URL</b> (3).</div>
     </div></div></div>
 
     <div class="card"><div class="step"><div class="num">3</div><div class="body">
-      <h3>Перезапустить и проверить</h3>
-      <ol>
-        <li><b>Перезапусти</b> Codex.</li>
-        <li>В чате напиши:</li>
-      </ol>
+      <h3>Проверить</h3>
+      <p style="margin:2px 0 0"><span class="pill">ai-lab</span> появится в списке серверов с включённым тумблером.
+         В новом чате напиши:</p>
       <div class="code"><button class="copy">Копировать</button><pre>вызови ai-lab corpus_stats</pre></div>
       <p style="margin:6px 0 0">Ответит <b>128 документов</b> и датой — всё работает. Дальше спрашивай обычными словами:</p>
       <div class="code"><button class="copy">Копировать</button><pre>Проверь инициативу: &lt;краткое описание&gt;
 Какие обещания по &lt;теме&gt; не закрыты?
 Нет ли противоречий по &lt;метрике&gt; между документами?</pre></div>
+      <div class="note">По желанию: файл <span class="pill">AGENTS.md</span> (пришлёт Денис), положенный в папку твоего проекта
+         в Codex, делает ответы аккуратнее (всегда источник, не выдумывает). Не обязательно.</div>
     </div></div></div>
 
     <h2 class="sec">Если не работает</h2>
     <div class="card"><table>
-      <tr><td>Codex «не видит» ai-lab</td><td>Проверь, что две строки из шага&nbsp;1 сохранились (⚙️ → MCP settings → Open config.toml), и <b>перезапусти</b> Codex.</td></tr>
-      <tr><td>Ошибка про <code>url</code> / «not supported»</td><td>Обнови приложение Codex — подключение по ссылке появилось недавно.</td></tr>
+      <tr><td>Нет поля URL / не даёт сохранить</td><td>Проверь, что переключил тип на <b>«Потоковая передача HTTP»</b> — в режиме STDIO поля URL нет (там запускается локальная программа).</td></tr>
+      <tr><td>Codex «не видит» ai-lab</td><td>Настройки → Серверы MCP: тумблер у <b>ai-lab</b> должен быть включён. Затем открой <b>новый</b> чат.</td></tr>
       <tr><td><code>corpus_stats</code> молчит</td><td>Если сам Codex отвечает в чате — сеть в порядке. Подожди минуту, повтори.</td></tr>
     </table></div>
   </div>
