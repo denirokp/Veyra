@@ -51,6 +51,8 @@
   td{border-top:1px solid var(--line);padding:9px 6px;vertical-align:top;color:var(--mut)}
   td:first-child{color:var(--txt);font-weight:600;white-space:nowrap;padding-right:16px}
   ul{margin:6px 0 0;padding-left:20px;color:var(--mut)}
+  .uc-h{font-size:17px;font-weight:700;margin:0 0 4px}
+  .card p.mut{color:var(--mut);margin:0 0 8px}
   a{color:var(--acc)}
   .foot{color:var(--mut);font-size:13px;margin-top:30px;text-align:center}
 </style>
@@ -62,7 +64,8 @@
      противоречия, незакрытые обещания и пробелы — с цитатой и ссылкой на источник.</p>
 
   <div class="tabs">
-    <button data-tab="claude" class="active">Claude.ai&nbsp;— для коллег</button>
+    <button data-tab="claude" class="active">Claude.ai&nbsp;— подключение</button>
+    <button data-tab="use">Как пользоваться</button>
     <button data-tab="codex">Codex</button>
     <button data-tab="cc">Claude&nbsp;Code</button>
   </div>
@@ -112,6 +115,56 @@
       <tr><td>Claude.ai не открывается</td><td>Включите <b>западный VPN</b>.</td></tr>
       <tr><td>Нет «Add custom connector» / «Skills»</td><td>Нужна <b>платная</b> подписка Claude.</td></tr>
     </table></div>
+  </section>
+
+  <!-- ============ КАК ПОЛЬЗОВАТЬСЯ ============ -->
+  <section id="use" class="panel">
+    <div class="note">Спрашивай обычными словами. AI Lab найдёт в корпусе факты,
+       противоречия, незакрытые обещания и пробелы — каждое с цитатой и ссылкой на документ.</div>
+
+    <div class="card"><div class="uc-h">🎯 Проверить инициативу</div>
+      <p class="mut">Что в корпусе подтверждает идею, что противоречит, чего не хватает. Без вердикта — аргументы, решение за тобой.</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Проверь инициативу: <краткое описание></pre></div></div>
+
+    <div class="card"><div class="uc-h">⚖️ Найти противоречия</div>
+      <p class="mut">Одна метрика с разными значениями / стратегия спорит с планом. Таблицей со светофором и цитатами из обоих документов.</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Нет ли противоречий по <метрике/теме> между документами?</pre></div></div>
+
+    <div class="card"><div class="uc-h">📌 Незакрытые обещания</div>
+      <p class="mut">Что обещали и не отметили сделанным: цитата, документ, срок, ответственный; помечает просроченные.</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Какие обещания по <теме> не закрыты?</pre></div></div>
+
+    <div class="card"><div class="uc-h">🕳 Пробелы / серые зоны</div>
+      <p class="mut">Темы и риски, упомянутые в документах, но не закрытые планом, ответственным или метрикой.</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Где у нас пробелы по <теме>?</pre></div></div>
+
+    <div class="card"><div class="uc-h">📚 Что мы знаем про X</div>
+      <p class="mut">Сводка из документов с цитатами — быстрый онбординг в тему.</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Что мы уже знаем про <тема>? Дай с источниками</pre></div></div>
+
+    <div class="card"><div class="uc-h">✍️ Ревью и со-написание документа</div>
+      <p class="mut">Приложи черновик — разберёт по структуре, сверит фактуру с корпусом, допишет в стиле (числа не выдумывает — ставит [TODO]).</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Вот черновик: <вставить>. Проверь на противоречия с корпусом и допиши слабые места</pre></div></div>
+
+    <h2 class="sec">Что ждать в ответе</h2>
+    <div class="card"><ul>
+      <li>Каждый факт — <b>со ссылкой на документ-источник</b>.</li>
+      <li>Отделяет <b>ФАКТ</b> (есть в документах) от <b>ГИПОТЕЗЫ</b> (вывод).</li>
+      <li>Показывает <b>охват</b>: «проверено N из M по теме, данные на дату».</li>
+      <li>Данных мало — честно скажет, <b>не выдумает</b>.</li>
+      <li>Документ целиком за тебя не пишет — черновик с [TODO], финал за человеком.</li>
+    </ul></div>
+
+    <h2 class="sec">Чтобы спрашивать лучше</h2>
+    <div class="card"><ul>
+      <li><b>Будь конкретен:</b> назови тему, метрику, инициативу, период.</li>
+      <li>Нужна таблица/отчёт — так и скажи («сделай таблицу расхождений»).</li>
+      <li>В конце ответа он предложит <b>2–3 follow-up вопроса</b> — жми на них.</li>
+      <li>Ответил «мало материала» — переформулируй: синонимы, RU↔EN, полное название вместо сокращения.</li>
+    </ul></div>
+
+    <div class="note warn">Границы: знает только <b>наш корпус</b> (загруженные документы), не живые системы и не весь интернет.
+       Корпус — снимок на дату; самые свежие правки могут ещё не попасть. Не заменяет чтение первоисточника — показывает, куда смотреть.</div>
   </section>
 
   <!-- ============ CODEX ============ -->
