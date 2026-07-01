@@ -1,7 +1,14 @@
 # Деплой AI Lab на Fly.io
 
 Один контейнер: backend (FastAPI :8000) + MCP (:8765). Наружу торчит только
-MCP, авторизация — Bearer token. Данные (SQLite + Chroma) на fly volume.
+MCP. Данные (SQLite + Chroma) — на fly volume.
+
+> **Авторизация (PoC).** Claude.ai Custom Connector поддерживает только
+> **OAuth 2.1 + PKCE**, статичный Bearer-токен он прислать не может. Поэтому
+> на PoC сервер **открыт** (не задаём `MCP_AUTH_TOKEN`), а защита — приватный
+> URL. Настоящая авторизация — OAuth, отдельным заходом после демо.
+> Bearer-middleware в коде остаётся (включается `MCP_AUTH_TOKEN`), но только
+> для клиентов с кастомным заголовком (Claude Code / Avito-прокси), не Claude.ai.
 
 ## Один раз: установка fly CLI
 
@@ -13,89 +20,67 @@ fly auth signup        # или fly auth login если аккаунт уже е
 ## Первый деплой
 
 ```bash
-cd ~/Veyra
+cd ~/Code/Veyra
 
-# 1. Создаём app (Fly спросит имя — введи 'ai-lab' или подбери уникальное).
-#    Не создавай DB и не деплой сразу — мы хотим сначала volume и secrets.
-fly launch --no-deploy --copy-config --name ai-lab --region ams
+# 1. Создаём app (имя должно совпасть с fly.toml → app = "veyra").
+fly launch --no-deploy --copy-config --name veyra --region ams
 
-# 2. Создаём persistent volume под данные (sqlite + chroma).
-fly volumes create ai_lab_data --size 1 --region ams
+# 2. Persistent volume под данные (sqlite + chroma).
+fly volumes create ai_lab_data --size 1 --region ams --app veyra
 
-# 3. Секреты. Сгенерируй сильный токен для коллег.
-TOKEN=$(openssl rand -hex 32)
-echo "MCP_AUTH_TOKEN=$TOKEN"   # Сохрани этот токен — отдашь коллегам.
+# 3. Секреты. Токен НЕ ставим (см. про авторизацию выше). LLM_* нужны только
+#    чтобы backend прошёл startup-гейт — живой путь MCP их не зовёт (эмбеддинги
+#    локальные). ENABLE_RERANKER не задаём: на 2GB вторая модель = риск OOM.
+fly secrets set --app veyra \
+  LLM_API_KEY="dummy-not-used-on-live-path" \
+  LLM_BASE_URL="https://api.anthropic.com/v1/" \
+  LLM_MODEL="claude-haiku-4-5"
 
-fly secrets set MCP_AUTH_TOKEN="$TOKEN"
-fly secrets set LLM_API_KEY="dummy-not-used-on-live-path"
-fly secrets set LLM_BASE_URL="https://api.anthropic.com/v1/"
-fly secrets set LLM_MODEL="claude-haiku-4-5"
-
-# 4. Первый деплой — машина поднимется с пустой data/.
-fly deploy
+# 4. Первый деплой — образ соберётся с запечённой embed-моделью.
+fly deploy --app veyra
 ```
 
-После деплоя — `fly status` должен показать машину `started`.
+После деплоя — `fly status --app veyra` должен показать машину `started`.
 
 ## Загрузка корпуса на volume
 
 ```bash
-# Распаковываем бэкап локально.
-cd ~/Veyra-backup/$(date +%Y-%m-%d)
-ls -lh ai-lab-corpus-backup.tar.gz   # ~168 MB
-
-# Заливаем на fly volume через ssh.
-fly ssh sftp shell <<EOF
+cd ~/Code/Veyra
+fly ssh sftp shell --app veyra <<'EOF'
 cd /app/backend/data
-put khronika.db
-put -r chroma
+put backend/data/khronika.db khronika.db
+put -r backend/data/chroma chroma
 EOF
-```
 
-Если `sftp shell` тормозит — альтернатива через scp:
-
-```bash
-fly ssh console -C "mkdir -p /app/backend/data"
-tar czf - khronika.db chroma/ | fly ssh console -C "tar xzf - -C /app/backend/data"
-```
-
-После загрузки — перезапусти машину, чтобы backend пересчитал просроченные обещания:
-
-```bash
-fly machine restart $(fly status --json | jq -r '.Machines[0].id')
+# Рестарт — backend пересчитает просроченные обещания и подхватит корпус.
+fly machine restart $(fly status --app veyra --json | jq -r '.Machines[0].id')
 ```
 
 ## Проверка
 
 ```bash
-APP_URL="https://ai-lab.fly.dev"
-
-# 1. MCP endpoint без токена — 401.
-curl -s -o /dev/null -w "%{http_code}\n" "$APP_URL/mcp"
-
-# 2. С токеном — 405/406 (правильный «не голый GET, я MCP»).
-curl -s -o /dev/null -w "%{http_code}\n" \
-    -H "Authorization: Bearer $TOKEN" "$APP_URL/mcp"
+# Сервер открыт (PoC): без токена MCP отвечает 406 (жив, «я не голый GET»).
+curl -s -o /dev/null -w "HTTP %{http_code}\n" https://veyra.fly.dev/mcp   # ждём 406
 ```
 
 ## Коллеги подключаются (в Claude.ai)
 
-> URL — `https://<app>.fly.dev/mcp`, где `<app>` = имя приложения из `fly.toml`.
-> Назвал приложение `veyra` → URL `https://veyra.fly.dev/mcp`.
+Полная инструкция для коллег — `docs/CONNECT.md`. Коротко:
 
 Settings → Connectors → Add custom connector:
 
 - **Name:** `ai-lab`
-- **Remote MCP server URL:** `https://<app>.fly.dev/mcp`
-- **Advanced settings → Authorization header:** `Bearer <TOKEN>`
+- **Remote MCP server URL:** `https://veyra.fly.dev/mcp`
+- **Advanced → OAuth Client ID / Secret:** оставить **пустыми** (сервер открыт)
 
-После Add → в чате: `Вызови ai-lab corpus_stats`.
+Плюс импортировать skill `ai-lab/ai-lab-skill.zip`. Проверка в чате:
+`Вызови ai-lab corpus_stats`.
 
 ## Обновление кода
 
 ```bash
-git push    # как обычно
-fly deploy  # пересоберёт image и выкатит
+git push          # как обычно
+fly deploy --app veyra
 ```
 
 Данные на volume не теряются.
@@ -103,14 +88,13 @@ fly deploy  # пересоберёт image и выкатит
 ## Логи и отладка
 
 ```bash
-fly logs                          # стрим логов backend + MCP
-fly ssh console                   # bash внутри машины
-fly status                        # статус
-fly machine restart <id>          # перезапуск без передеплоя
+fly logs --app veyra
+fly ssh console --app veyra
+fly status --app veyra
+fly machine restart <id> --app veyra
 ```
 
 ## Расходы
 
-Fly.io бесплатный tier: 3 машины shared-cpu-1x по 256 MB. Мы используем
-2 vCPU + 2 GB RAM — это вне free tier, ~$10–15/мес. Volume 1 GB ~$0.15/мес.
-Для PoC нормально; для прод-нагрузки — пересмотреть.
+2 vCPU + 2 GB RAM — вне free tier, ~$10–15/мес. Volume 1 GB ~$0.15/мес. Для
+PoC нормально; для прод-нагрузки (и reranker) — брать машину с бóльшим RAM.
