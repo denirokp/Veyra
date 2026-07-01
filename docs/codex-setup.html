@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Lab в Codex — настройка с нуля</title>
+<style>
+  :root{--bg:#0f1216;--card:#171b21;--line:#262c35;--txt:#e8ecf1;--mut:#9aa4b2;--acc:#4f9cf9;--ok:#2f9e5f;--warn:#3a2f1a;--warnln:#6b5720}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:780px;margin:0 auto;padding:32px 20px 60px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--mut);margin:0 0 22px}
+  .note{background:#12171d;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;color:var(--mut);font-size:14.5px}
+  .note.warn{background:var(--warn);border-color:var(--warnln);color:#e7d9b0}
+  .note b{color:var(--txt)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 18px 16px;margin:16px 0}
+  .step{display:flex;gap:14px}
+  .num{flex:0 0 34px;height:34px;border-radius:50%;background:var(--acc);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .body{flex:1;min-width:0}
+  h3{margin:2px 0 8px;font-size:18px}
+  .tag{display:inline-block;font-size:12px;font-weight:600;color:#9fd2ff;border:1px solid #2f4a63;border-radius:20px;padding:1px 9px;margin-left:8px;vertical-align:middle}
+  .tag.opt{color:#cbb98a;border-color:#5b4d29}
+  ol{margin:6px 0 0;padding-left:22px}
+  ol li{margin:5px 0}
+  .pill{background:#0c0f13;border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px}
+  code{background:#0c0f13;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13.5px}
+  .code{position:relative;background:#0b0e12;border:1px solid var(--line);border-radius:10px;margin:10px 0}
+  .code pre{margin:0;padding:14px 14px;overflow:auto;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;color:#dce6f2;white-space:pre}
+  .copy{position:absolute;top:8px;right:8px;background:#1b222b;color:var(--mut);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font-size:12.5px;cursor:pointer}
+  .copy:hover{color:var(--txt)}
+  .copy.ok{color:#fff;background:var(--ok);border-color:var(--ok)}
+  h2.sec{font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin:26px 0 8px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  td{border-top:1px solid var(--line);padding:10px 8px;vertical-align:top;color:var(--mut)}
+  td:first-child{color:var(--txt);font-weight:600;white-space:nowrap;padding-right:14px}
+  .foot{color:var(--mut);font-size:13px;margin-top:30px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI Lab в Codex</h1>
+  <p class="sub">Настройка с нуля на компьютере, где стоит только приложение <b>Codex</b>. 3 шага, ~2 минуты.</p>
+
+  <div class="note">Ставить и качать почти ничего не надо: сервер AI Lab уже работает в облаке.
+     Нужно только один раз вписать в Codex ссылку на него. <b>Скилла/zip тут нет</b> — это только у Claude.</div>
+
+  <div class="note warn"><b>Что нужно заранее:</b> приложение Codex установлено и ты в него вошёл
+     (если у коллеги Codex уже отвечает в чате — всё готово, идём дальше).</div>
+
+  <!-- ШАГ 1 -->
+  <div class="card"><div class="step">
+    <div class="num">1</div>
+    <div class="body">
+      <h3>Подключить AI Lab <span class="tag">обязательно</span></h3>
+      <ol>
+        <li>В Codex открой: значок <b>⚙️ шестерёнки</b> → <b>MCP settings</b> → <b>Open config.toml</b>.
+            Откроется текстовый файл настроек.</li>
+        <li>Вставь в <b>самый конец</b> файла эти две строки и сохрани (<b>Ctrl+S</b> / <b>⌘S</b>):</li>
+      </ol>
+      <div class="code"><button class="copy">Копировать</button><pre>[mcp_servers.ai-lab]
+url = "https://veyra.fly.dev/mcp"</pre></div>
+      <div class="note">Это обычный текстовый файл — сломать этим ничего нельзя. Сервер открытый:
+         пароль/токен не нужен, больше ничего не заполняем.</div>
+    </div>
+  </div></div>
+
+  <!-- ШАГ 2 -->
+  <div class="card"><div class="step">
+    <div class="num">2</div>
+    <div class="body">
+      <h3>Добавить правила <span class="tag opt">по желанию</span></h3>
+      <p style="margin:2px 0 0">Файл <span class="pill">AGENTS.md</span> (пришлёт Денис) учит Codex отвечать правильно:
+         всегда давать источник, не выдумывать, показывать охват.</p>
+      <ol>
+        <li>Сохрани файл <span class="pill">AGENTS.md</span> в <b>ту же папку</b>, где только что открылся
+            <code>config.toml</code> из шага&nbsp;1 (то есть как <code>~/.codex/AGENTS.md</code>).</li>
+        <li>Имя файла — ровно <b>AGENTS.md</b>, ничего не переименовывать.</li>
+      </ol>
+      <div class="note">Можно <b>пропустить</b> — AI Lab заработает и без этого шага, просто ответы будут «сырее».</div>
+    </div>
+  </div></div>
+
+  <!-- ШАГ 3 -->
+  <div class="card"><div class="step">
+    <div class="num">3</div>
+    <div class="body">
+      <h3>Перезапустить и проверить</h3>
+      <ol>
+        <li><b>Полностью перезапусти</b> Codex (чтобы он увидел новый сервер).</li>
+        <li>В чате напиши обычными словами:</li>
+      </ol>
+      <div class="code"><button class="copy">Копировать</button><pre>вызови ai-lab corpus_stats</pre></div>
+      <p style="margin:6px 0 0">Ответит: <b>128 документов</b> и дата обновления — значит всё работает. 🎉</p>
+      <p class="sub" style="margin:8px 0 0">Дальше спрашивай как коллегу-аналитика:</p>
+      <div class="code"><button class="copy">Копировать</button><pre>Проверь инициативу: &lt;краткое описание&gt;
+Какие обещания по &lt;теме&gt; не закрыты?
+Нет ли противоречий по &lt;метрике&gt; между документами?
+Что мы уже знаем про &lt;тема&gt;? Дай с источниками</pre></div>
+    </div>
+  </div></div>
+
+  <h2 class="sec">Если не сработало</h2>
+  <div class="card"><table>
+    <tr><td>Codex «не видит» ai-lab</td><td>Проверь, что две строки из шага&nbsp;1 сохранились (⚙️ → MCP settings → Open config.toml), и <b>перезапусти</b> Codex. Список подключённого — команда <code>/mcp</code> в чате.</td></tr>
+    <tr><td>Ошибка про <code>url</code> / «not supported»</td><td>Обнови приложение Codex до свежей версии — подключение сервера по ссылке (URL) появилось недавно.</td></tr>
+    <tr><td><code>corpus_stats</code> молчит</td><td>Если сам Codex у коллеги отвечает в чате — сеть в порядке, ai-lab это просто ещё один адрес. Подожди минуту и повтори.</td></tr>
+    <tr><td>Отвечает «не по правилам»</td><td>Проверь, что <code>AGENTS.md</code> из шага&nbsp;2 лежит рядом с <code>config.toml</code> (как <code>~/.codex/AGENTS.md</code>).</td></tr>
+  </table></div>
+
+  <p class="foot">AI Lab · сервер veyra.fly.dev/mcp · открытый PoC</p>
+</div>
+
+<script>
+  document.querySelectorAll('.copy').forEach(btn=>{
+    btn.onclick=async()=>{
+      const pre=btn.parentElement.querySelector('pre');
+      try{ await navigator.clipboard.writeText(pre.textContent); }
+      catch(e){ const r=document.createRange(); r.selectNode(pre);
+        getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); getSelection().removeAllRanges(); }
+      const t=btn.textContent; btn.textContent='Скопировано ✓'; btn.classList.add('ok');
+      setTimeout(()=>{btn.textContent=t; btn.classList.remove('ok')},1400);
+    };
+  });
+</script>
+</body>
+</html>
