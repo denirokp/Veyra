@@ -1,7 +1,7 @@
 # AI Lab — единый чек-лист выката (go-live)
 
 Один прогон от чистого корпуса до подключённых коллег. Детали деплоя —
-`DEPLOY-FLY.md`, инструкция для коллег — `CONNECT.md`.
+`DEPLOY-FLY.md`, инструкция для коллег — `CONNECT-SIMPLE.md` (или интерактивная `connect.html`).
 
 Приложение на Fly называется **`veyra`**, публичный URL —
 `https://veyra.fly.dev/mcp`. Авторизация: **сервер открыт** (Claude.ai
@@ -99,7 +99,7 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" https://veyra.fly.dev/mcp   # жд
 
 ## 6. Коллеги подключаются
 
-Отправь коллегам `docs/CONNECT.md` + `ai-lab/ai-lab-skill.zip`. Кратко:
+Отправь коллегам `docs/CONNECT-SIMPLE.md` (или `docs/connect.html`) + `ai-lab/ai-lab-skill.zip`. Кратко:
 Claude.ai → Settings → Connectors → Add custom → URL `https://veyra.fly.dev/mcp`,
 OAuth-поля пустыми; затем импорт skill-zip.
 

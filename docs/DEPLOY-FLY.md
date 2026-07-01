@@ -74,7 +74,7 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" https://veyra.fly.dev/mcp   # жд
 
 ## Коллеги подключаются (в Claude.ai)
 
-Полная инструкция для коллег — `docs/CONNECT.md`. Коротко:
+Полная инструкция для коллег — `docs/CONNECT-SIMPLE.md`. Коротко:
 
 Settings → Connectors → Add custom connector:
 
