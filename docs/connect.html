@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Lab — подключение</title>
+<style>
+  :root{
+    --bg:#0f1216; --card:#171b21; --card2:#1e242c; --line:#2a323c;
+    --txt:#e7ecf2; --mut:#9aa7b4; --acc:#2ecc9b; --acc2:#1f9e78;
+    --code:#11151a; --warn:#f0b429;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:820px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;margin:0 0 6px;letter-spacing:-.5px}
+  .sub{color:var(--mut);margin:0 0 24px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+  .tabs button{background:var(--card);color:var(--mut);border:1px solid var(--line);
+    padding:9px 16px;border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;transition:.15s}
+  .tabs button:hover{color:var(--txt)}
+  .tabs button.active{background:var(--acc);color:#06251c;border-color:var(--acc)}
+  .panel{display:none;animation:f .2s ease}
+  .panel.active{display:block}
+  @keyframes f{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;margin:0 0 14px}
+  .step{display:flex;gap:14px;align-items:flex-start}
+  .num{flex:0 0 30px;height:30px;border-radius:50%;background:var(--acc);color:#06251c;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;margin-top:1px}
+  .step h3{margin:2px 0 8px;font-size:18px}
+  .step p{margin:0 0 10px;color:var(--mut)}
+  .step .body{flex:1;min-width:0}
+  .code{position:relative;background:var(--code);border:1px solid var(--line);
+    border-radius:10px;margin:8px 0}
+  .code pre{margin:0;padding:13px 14px;overflow-x:auto;font:13.5px/1.5 "SF Mono",Menlo,Consolas,monospace;
+    color:#d4e6df}
+  .copy{position:absolute;top:8px;right:8px;background:var(--card2);color:var(--mut);
+    border:1px solid var(--line);border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer}
+  .copy:hover{color:var(--txt)}
+  .copy.ok{background:var(--acc);color:#06251c;border-color:var(--acc)}
+  .pill{display:inline-block;background:var(--card2);border:1px solid var(--line);
+    border-radius:6px;padding:1px 7px;font-size:13px;color:var(--acc)}
+  .note{background:var(--card2);border-left:3px solid var(--acc);border-radius:0 8px 8px 0;
+    padding:11px 14px;color:var(--mut);font-size:14px;margin:8px 0}
+  .warn{border-left-color:var(--warn)}
+  h2.sec{font-size:15px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);
+    margin:24px 0 10px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  td{border-top:1px solid var(--line);padding:9px 6px;vertical-align:top;color:var(--mut)}
+  td:first-child{color:var(--txt);font-weight:600;white-space:nowrap;padding-right:16px}
+  ul{margin:6px 0 0;padding-left:20px;color:var(--mut)}
+  a{color:var(--acc)}
+  .foot{color:var(--mut);font-size:13px;margin-top:30px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI&nbsp;Lab — подключение</h1>
+  <p class="sub">Помощник внутри Claude / Codex: находит в стратегических документах
+     противоречия, незакрытые обещания и пробелы — с цитатой и ссылкой на источник.</p>
+
+  <div class="tabs">
+    <button data-tab="claude" class="active">Claude.ai&nbsp;— для коллег</button>
+    <button data-tab="codex">Codex</button>
+    <button data-tab="cc">Claude&nbsp;Code</button>
+  </div>
+
+  <!-- ============ CLAUDE.AI ============ -->
+  <section id="claude" class="panel active">
+    <div class="note">Нужно: платная подписка Claude (Pro / Team / Max) и включённый
+      <b>западный VPN</b>. Если Claude.ai у вас открывается — VPN уже ок. Настройка ~5&nbsp;минут, один раз.</div>
+
+    <div class="card"><div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Подключить данные (коннектор)</h3>
+        <p>Settings ⚙️ → <b>Connectors</b> → <b>Add custom connector</b>. В поле URL вставьте
+           (поля OAuth оставьте пустыми) → <b>Add</b>:</p>
+        <div class="code"><button class="copy">Копировать</button><pre>https://veyra.fly.dev/mcp</pre></div>
+      </div>
+    </div></div>
+
+    <div class="card"><div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Загрузить скилл</h3>
+        <p>Settings → <b>Skills</b> → <b>Upload skill</b> → выберите файл
+           <span class="pill">ai-lab-skill.zip</span> (пришлёт Денис).</p>
+        <div class="note">Скилл — это правила, по которым Claude пользуется данными: всегда даёт
+           источник, не выдумывает, показывает охват. Без него хуже — загрузите.</div>
+      </div>
+    </div></div>
+
+    <div class="card"><div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <h3>Спросить</h3>
+        <p>В новом чате убедитесь, что коннектор <span class="pill">ai-lab</span> включён
+           (значок инструментов у поля ввода), и пишите обычными словами:</p>
+        <div class="code"><button class="copy">Копировать</button><pre>Что мы уже знаем про <тема>?
+Проверь инициативу: <текст>
+Какие обещания по <теме> не закрыты?
+Нет ли противоречий по <метрике> между документами?</pre></div>
+      </div>
+    </div></div>
+
+    <h2 class="sec">Если что-то не так</h2>
+    <div class="card"><table>
+      <tr><td>Claude пишет «инструментов нет»</td><td>В чате <b>включите коннектор ai-lab</b> (галочка в панели инструментов у поля ввода).</td></tr>
+      <tr><td>Claude.ai не открывается</td><td>Включите <b>западный VPN</b>.</td></tr>
+      <tr><td>Нет «Add custom connector» / «Skills»</td><td>Нужна <b>платная</b> подписка Claude.</td></tr>
+    </table></div>
+  </section>
+
+  <!-- ============ CODEX ============ -->
+  <section id="codex" class="panel">
+    <div class="note">Нужно: установленный и залогиненный <b>Codex CLI</b> (<code>codex --version</code>),
+       локальный репозиторий Veyra (для AGENTS.md). Если api.openai.com недоступен — VPN.</div>
+
+    <div class="card"><div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Инструменты — MCP-сервер</h3>
+        <p>Добавить сервер в <span class="pill">~/.codex/config.toml</span>:</p>
+        <div class="code"><button class="copy">Копировать</button><pre>mkdir -p ~/.codex
+printf '\n[mcp_servers.ai-lab]\nurl = "https://veyra.fly.dev/mcp"\n' >> ~/.codex/config.toml</pre></div>
+        <div class="note">Сервер открытый — токен не нужен. Codex нативно поддерживает remote HTTP MCP по URL.</div>
+      </div>
+    </div></div>
+
+    <div class="card"><div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Правила — AGENTS.md</h3>
+        <p>У Codex нет «skills», поэтому правила идут через AGENTS.md (глобально):</p>
+        <div class="code"><button class="copy">Копировать</button><pre>cp ~/Code/Veyra/ai-lab/AGENTS.md ~/.codex/AGENTS.md</pre></div>
+        <div class="note">Правила условные («когда просят проверить инициативу / расхождения…») — обычному кодингу не мешают.
+           Хочешь изоляцию — положи AGENTS.md в отдельную папку и работай из неё.</div>
+      </div>
+    </div></div>
+
+    <div class="card"><div class="step">
+      <div class="num">3</div>
+      <div class="body">
+        <h3>Проверить</h3>
+        <div class="code"><button class="copy">Копировать</button><pre>codex
+# в сессии:
+вызови ai-lab corpus_stats</pre></div>
+        <p>Ожидаемо: число документов (<b>128</b>) и <code>last_indexed_at</code>.</p>
+      </div>
+    </div></div>
+
+    <h2 class="sec">Если что-то не так</h2>
+    <div class="card"><table>
+      <tr><td>Codex не видит инструменты</td><td>Проверь синтаксис <code>~/.codex/config.toml</code>, перезапусти <code>codex</code>. Список серверов — командой <code>/mcp</code> в сессии.</td></tr>
+      <tr><td>Ошибка про <code>url</code></td><td>Обнови Codex CLI — remote HTTP MCP по URL это свежая возможность.</td></tr>
+      <tr><td>401 / 403</td><td>Сервер открытый, токен не нужен. Если включён MCP_AUTH_TOKEN — добавь <code>bearer_token_env_var</code>.</td></tr>
+    </table></div>
+  </section>
+
+  <!-- ============ CLAUDE CODE ============ -->
+  <section id="cc" class="panel">
+    <div class="note">Для Claude Code всё уже в репозитории Veyra: <code>ai-lab/.mcp.json</code>
+       (сервер) и <code>ai-lab/skills/SKILL.md</code> (правила).</div>
+    <div class="card"><div class="step">
+      <div class="num">1</div>
+      <div class="body">
+        <h3>Сервер</h3>
+        <p>Уже описан в <span class="pill">ai-lab/.mcp.json</span>:</p>
+        <div class="code"><button class="copy">Копировать</button><pre>{ "ai-lab": { "type": "http", "url": "https://veyra.fly.dev/mcp" } }</pre></div>
+        <p>Claude Code подхватит его из проекта (или добавь через <code>claude mcp add</code>).</p>
+      </div>
+    </div></div>
+    <div class="card"><div class="step">
+      <div class="num">2</div>
+      <div class="body">
+        <h3>Правила + проверка</h3>
+        <p>Скилл — <span class="pill">ai-lab/skills/SKILL.md</span> (подхватывается автоматически).
+           Проверка в сессии:</p>
+        <div class="code"><button class="copy">Копировать</button><pre>вызови ai-lab corpus_stats</pre></div>
+      </div>
+    </div></div>
+  </section>
+
+  <p class="foot">AI Lab — 6 Pagers · сервер: veyra.fly.dev/mcp · открытый PoC</p>
+</div>
+
+<script>
+  document.querySelectorAll('.tabs button').forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      document.getElementById(b.dataset.tab).classList.add('active');
+    };
+  });
+  document.querySelectorAll('.copy').forEach(btn=>{
+    btn.onclick=async()=>{
+      const pre=btn.parentElement.querySelector('pre');
+      try{ await navigator.clipboard.writeText(pre.textContent); }
+      catch(e){ const r=document.createRange(); r.selectNode(pre);
+        getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); getSelection().removeAllRanges(); }
+      const t=btn.textContent; btn.textContent='Скопировано ✓'; btn.classList.add('ok');
+      setTimeout(()=>{btn.textContent=t; btn.classList.remove('ok')},1400);
+    };
+  });
+</script>
+</body>
+</html>
