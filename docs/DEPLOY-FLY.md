@@ -44,16 +44,25 @@ fly deploy --app veyra
 
 ## Загрузка корпуса на volume
 
+> ⚠️ Заливать **тарболом через sftp**, а НЕ потоком через `fly ssh console`
+> (pty корёжит бинарь → `khronika.db` приезжает битый, backend не стартует).
+
 ```bash
-cd ~/Code/Veyra
+cd ~/Code/Veyra/backend/data
+tar czf /tmp/corpus.tgz khronika.db chroma      # тарбол локально
+
+fly ssh console --app veyra -C "sh -lc 'rm -rf /app/backend/data/khronika.db /app/backend/data/chroma /app/backend/data/corpus.tgz'"
+
 fly ssh sftp shell --app veyra <<'EOF'
-cd /app/backend/data
-put backend/data/khronika.db khronika.db
-put -r backend/data/chroma chroma
+put /tmp/corpus.tgz /app/backend/data/corpus.tgz
 EOF
 
+# Сверить размер (байт-в-байт с локальным), распаковать НА машине.
+fly ssh console --app veyra -C "ls -l /app/backend/data/corpus.tgz"
+fly ssh console --app veyra -C "sh -lc 'cd /app/backend/data && tar xzf corpus.tgz && rm corpus.tgz'"
+
 # Рестарт — backend пересчитает просроченные обещания и подхватит корпус.
-fly machine restart $(fly status --app veyra --json | jq -r '.Machines[0].id')
+fly machine restart $(fly status --app veyra --json | jq -r '.Machines[0].id') --app veyra
 ```
 
 ## Проверка

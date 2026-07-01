@@ -50,15 +50,40 @@ fly deploy --app veyra
 
 ## 3. Залить чищеный корпус на volume
 
+> ⚠️ **Только через sftp-тарбол.** НЕ лить бинарь потоком
+> `tar czf - … | fly ssh console -C "tar x…"` — `fly ssh console` гонит stdin
+> через pty, который **корёжит бинарные данные** → `khronika.db` приезжает
+> битый (`database disk image is malformed`, backend не стартует). `sftp`
+> передаёт файл байт-в-байт.
+
 ```bash
-cd ~/Code/Veyra
+cd ~/Code/Veyra/backend/data
+
+# 1. тарбол локально
+tar czf /tmp/corpus.tgz khronika.db chroma
+ls -l /tmp/corpus.tgz                       # запомни размер (байты)
+
+# 2. очистить том
+fly ssh console --app veyra -C "sh -lc 'rm -rf /app/backend/data/khronika.db /app/backend/data/chroma /app/backend/data/corpus.tgz'"
+
+# 3. залить тарбол через sftp (бинарь-чисто)
 fly ssh sftp shell --app veyra <<'EOF'
-cd /app/backend/data
-put backend/data/khronika.db khronika.db
-put -r backend/data/chroma chroma
+put /tmp/corpus.tgz /app/backend/data/corpus.tgz
 EOF
-fly machine restart $(fly status --app veyra --json | jq -r '.Machines[0].id')
+
+# 4. СВЕРИТЬ размер на машине с локальным (должны совпасть байт-в-байт!)
+fly ssh console --app veyra -C "ls -l /app/backend/data/corpus.tgz"
+
+# 5. распаковать НА машине, убрать тарбол
+fly ssh console --app veyra -C "sh -lc 'cd /app/backend/data && tar xzf corpus.tgz && rm corpus.tgz && du -sh khronika.db chroma'"
+
+# 6. рестарт
+fly machine restart $(fly status --app veyra --json | jq -r '.Machines[0].id') --app veyra
 ```
+
+После рестарта backend ~45с грузится (модель + `mark_overdue`); проверь
+`fly ssh console --app veyra -C "curl -s -o /dev/null -w '%{http_code}' localhost:8000/health"`
+→ должно быть `200` (не `000`).
 
 ## 4. Проверка сервера
 
