@@ -63,7 +63,8 @@
   <!-- ================= CLAUDE.AI ================= -->
   <div id="p-claude" class="path active">
     <div class="note warn">Нужны: <b>платная</b> подписка Claude (Pro/Team/Max) и файл
-       <b>ai-lab-skill.zip</b> (пришлёт Денис). Если Claude.ai у тебя открывается — VPN уже в порядке.</div>
+       <b>ai-lab-skill.zip</b> (пришлёт Денис). Если Claude.ai у тебя открывается — VPN уже в порядке.
+       Шаги <b>одинаковы на Mac, Windows и в браузере</b> — это сайт/приложение Claude, ОС не важна.</div>
 
     <div class="card"><div class="step"><div class="num">1</div><div class="body">
       <h3>Подключить данные</h3>
@@ -107,12 +108,13 @@
   <!-- ================= CODEX ================= -->
   <div id="p-codex" class="path">
     <div class="note warn">Это для тех, у кого стоит приложение <b>Codex</b> и он в него вошёл.
-       Ставить/качать ничего не надо — сервер уже в облаке, нужно вписать одну ссылку.</div>
+       Ставить/качать ничего не надо — сервер уже в облаке, нужно вписать одну ссылку.
+       <b>Работает на Mac и на Windows</b> — приложение есть под обе; отличается только Шаг&nbsp;4 (папка настроек).</div>
 
     <div class="card"><div class="step"><div class="num">1</div><div class="body">
       <h3>Открыть список серверов</h3>
       <ol>
-        <li>Внизу слева (где твоя почта) → <b>Настройки</b> (или <b>⌘,</b>).</li>
+        <li>Внизу слева (где твоя почта) → <b>Настройки</b> (⌘, на Mac / Ctrl+, на Windows).</li>
         <li>В настройках слева, раздел «Интеграции» → <b>Серверы MCP</b>.</li>
         <li>Нажми <b>+ Добавить сервер</b> <span style="color:#e5484d;font-weight:700">(1)</span>.</li>
       </ol>
@@ -185,12 +187,9 @@
       <p style="margin:2px 0 0">Файл <span class="pill">AGENTS.md</span> (пришлёт Денис) — это «правила», как Codex
          пользуется данными (то же, что скилл у Claude): всегда даёт источник, не выдумывает, показывает охват.
          Codex читает его <b>сам</b>. Можно пропустить — AI Lab работает и без него, просто ответы будут «сырее».</p>
-      <p style="margin:12px 0 2px"><b>Проще всего — сделать правила общими для всех проектов:</b></p>
-      <ol>
-        <li>Открой <b>Finder</b> → нажми <b>⌘ + ⇧ + G</b> («Переход к папке»).</li>
-        <li>Впиши <span class="pill">~/.codex</span> и нажми Enter.</li>
-        <li>Перетащи в эту папку файл <b>AGENTS.md</b> (имя ровно такое, не переименовывать).</li>
-      </ol>
+      <p style="margin:12px 0 2px"><b>Проще всего — общие правила для всех проектов: открой папку настроек Codex и положи туда AGENTS.md.</b></p>
+
+      <p style="margin:8px 0 2px">🍏 <b>На Mac:</b> Finder → <b>⌘ + ⇧ + G</b> → впиши <span class="pill">~/.codex</span> → Enter.</p>
       <svg class="shot" viewBox="0 0 620 132" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
         <rect width="620" height="132" rx="12" fill="#f2f3f5"/>
         <rect x="30" y="24" width="560" height="84" rx="12" fill="#ffffff" stroke="#e0e2e6"/>
@@ -200,7 +199,19 @@
         <rect x="470" y="70" width="98" height="34" rx="8" fill="#2f6bff"/>
         <text x="519" y="92" font-size="13.5" font-weight="600" fill="#ffffff" text-anchor="middle">Перейти</text>
       </svg>
-      <div class="cap">Finder → ⌘⇧G → впиши <b>~/.codex</b> → положи туда <b>AGENTS.md</b>.</div>
+
+      <p style="margin:12px 0 2px">🪟 <b>На Windows:</b> Проводник → клик в <b>адресную строку</b> сверху →
+         впиши <span class="pill">%USERPROFILE%\.codex</span> → Enter.</p>
+      <svg class="shot" viewBox="0 0 620 92" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,Segoe UI,Roboto,sans-serif">
+        <rect width="620" height="92" rx="12" fill="#f2f3f5"/>
+        <rect x="16" y="18" width="588" height="32" rx="6" fill="#ffffff" stroke="#c9ccd1"/>
+        <text x="30" y="39" font-size="13.5" fill="#1a1a1a">%USERPROFILE%\.codex</text>
+        <rect x="512" y="20" width="88" height="28" rx="5" fill="#eef3ff" stroke="#2f6bff" stroke-width="1.5"/>
+        <text x="556" y="39" font-size="12.5" font-weight="600" fill="#2f6bff" text-anchor="middle">Enter ↵</text>
+        <text x="30" y="74" font-size="12" fill="#8a8a8a">Адресная строка Проводника Windows — впиши путь и нажми Enter</text>
+      </svg>
+
+      <p style="margin:12px 0 0">В открывшуюся папку перетащи файл <b>AGENTS.md</b> — имя ровно такое, не переименовывать.</p>
       <div class="note">Только для одного проекта? Положи <code>AGENTS.md</code> в <b>папку этого проекта</b> (её видно
          в Codex в разделе «Проекты»). <b>Проверка:</b> задай вопрос по корпусу — если в ответе идут цитаты и ссылки
          на документы, правила подхватились. Codex перечитывает их в новом чате.</div>
