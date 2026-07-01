@@ -136,32 +136,46 @@ async def search_corpus(query: str, top_k: int = 10, workspace: str = "default")
 
 @mcp.tool()
 @_tracked
-async def find_numeric_contradictions() -> dict:
+async def find_numeric_contradictions(query: str = "") -> dict:
     """Предвычисленные ЧИСЛОВЫЕ расхождения корпуса — одна метрика с
     разными значениями (между документами и внутри документа).
     Готовая таблица, без LLM-вызова. Каждая запись несёт severity:
     critical | medium | low — критичность по величине отрыва значений.
+
+    query — тема для фильтрации на сервере (напр. "GMV" или "churn
+    продавцов"). Вернутся только релевантные строки, отсортированные по
+    совпадению. Пусто → вся таблица. На тематическом вопросе задавай query,
+    не тяни всю таблицу и не фильтруй её вручную.
     """
-    return {"numeric_contradictions": await _get("/api/contradictions/numeric")}
+    params = {"query": query} if query else None
+    return {"numeric_contradictions": await _get("/api/contradictions/numeric", params)}
 
 
 @mcp.tool()
 @_tracked
-async def find_logic_contradictions() -> dict:
+async def find_logic_contradictions(query: str = "") -> dict:
     """Предвычисленные ЛОГИЧЕСКИЕ расхождения корпуса — несовместимые по
     смыслу утверждения. Готовая таблица, без LLM-вызова. Каждая запись
     несёт severity: critical | medium | low | unknown.
+
+    query — тема для фильтрации на сервере; вернутся только релевантные
+    строки. Пусто → вся таблица.
     """
-    return {"logic_contradictions": await _get("/api/contradictions/logic")}
+    params = {"query": query} if query else None
+    return {"logic_contradictions": await _get("/api/contradictions/logic", params)}
 
 
 @mcp.tool()
 @_tracked
-async def find_open_promises() -> dict:
+async def find_open_promises(query: str = "") -> dict:
     """Предвычисленные незакрытые обещания (open / overdue) — что
     обещали в документах и не отметили выполненным. Готовая таблица.
+
+    query — тема для фильтрации на сервере; вернутся только релевантные
+    обещания. Пусто → вся таблица.
     """
-    return {"promises": await _get("/api/promises")}
+    params = {"query": query} if query else None
+    return {"promises": await _get("/api/promises", params)}
 
 
 @mcp.tool()

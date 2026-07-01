@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import ContradictionPatch
+from app.topic_filter import filter_rows_by_query
 from app.storage.sql_db import (
     get_session,
     get_document,
@@ -19,6 +20,7 @@ router = APIRouter(tags=["contradictions"])
 @router.get("/contradictions/numeric")
 async def get_numeric_contradictions(
     status: str | None = None,
+    query: str | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     items = await list_contradictions(db, status=status)
@@ -49,7 +51,10 @@ async def get_numeric_contradictions(
             "severity": c.severity,
             "created_at": c.created_at,
         })
-    return result
+    return filter_rows_by_query(result, query, lambda r: " ".join(str(x) for x in (
+        r["metric"], r["period"], r["value_a"], r["value_b"],
+        r["document_a"]["title"], r["document_b"]["title"],
+    )))
 
 
 @router.patch("/contradictions/numeric/{contradiction_id}")
@@ -81,9 +86,10 @@ async def resolve_numeric_contradiction(
 @router.get("/contradictions")
 async def get_contradictions_compat(
     status: str | None = None,
+    query: str | None = None,
     db: AsyncSession = Depends(get_session),
 ):
-    return await get_numeric_contradictions(status=status, db=db)
+    return await get_numeric_contradictions(status=status, query=query, db=db)
 
 
 @router.patch("/contradictions/{contradiction_id}")
@@ -102,6 +108,7 @@ async def resolve_contradiction_compat(
 @router.get("/contradictions/logic")
 async def get_logic_signals(
     status: str | None = None,
+    query: str | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     items = await list_logic_signals(db, status=status)
@@ -135,7 +142,10 @@ async def get_logic_signals(
             "review_notes": s.review_notes,
             "created_at": s.created_at,
         })
-    return result
+    return filter_rows_by_query(result, query, lambda r: " ".join(str(x) for x in (
+        r["signal_type"], r["statement_a"], r["statement_b"],
+        r["document_a"]["title"], r["document_b"]["title"],
+    )))
 
 
 @router.patch("/contradictions/logic/{signal_id}")

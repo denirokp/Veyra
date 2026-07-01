@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schemas import PromisePatch
+from app.topic_filter import filter_rows_by_query
 from app.storage.sql_db import get_session, list_promises, get_document
 
 router = APIRouter(tags=["promises"])
@@ -10,6 +11,7 @@ router = APIRouter(tags=["promises"])
 @router.get("/promises")
 async def get_promises(
     status: str | None = None,
+    query: str | None = None,
     db: AsyncSession = Depends(get_session),
 ):
     items = await list_promises(db, status=status)
@@ -29,7 +31,9 @@ async def get_promises(
             "resolved_at": p.resolved_at,
             "notes": p.notes,
         })
-    return result
+    return filter_rows_by_query(result, query, lambda r: " ".join(str(x) for x in (
+        r["text"], r["normalized_text"], r["metric"], r["document"]["title"],
+    )))
 
 
 @router.patch("/promises/{promise_id}")
