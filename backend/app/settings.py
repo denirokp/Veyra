@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     # (ENABLE_BACKGROUND_SIGNALS=0), чтобы не тратить ~6 LLM-вызовов на документ.
     ENABLE_BACKGROUND_SIGNALS: bool = True
 
+    # Слой фактов («чистота»). На индексации дешёвая LLM (fast_model) вынимает
+    # из документа АТОМАРНЫЕ самодостаточные факты (тип + утверждение + цитата-
+    # эвиденс + период) и кладёт их отдельной Chroma-коллекцией `facts`. retrieve
+    # подмешивает факты к чанкам — LLM получает чистые факты, а не сырьё. Это
+    # ингест-тайм LLM без резидентной модели в RAM (в отличие от reranker), на
+    # 2GB Fly безопасно. ВЫКЛ по умолчанию: сначала бэкафилл существующего
+    # корпуса (scripts/extract_facts_backfill.py), потом включай ENABLE_FACTS=1.
+    ENABLE_FACTS: bool = False
+
     # Опциональная авторизация по статичному bearer-токену. Если задан —
     # все API endpoints кроме /health требуют заголовок
     #   Authorization: Bearer <API_AUTH_TOKEN>
